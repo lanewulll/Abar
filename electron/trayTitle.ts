@@ -3,5 +3,5 @@ export function formatTrayTitle(usedPercent: number | undefined): string {
     return 'Abar';
   }
 
-  return `C ${Math.round(usedPercent)}%`;
+  return `Abar ${Math.round(usedPercent)}%`;
 }

@@ -12,6 +12,7 @@
     "test": "npm run rebuild:node && vitest run",
     "test:watch": "vitest",
     "quota:diagnose": "node scripts/diagnose-codex-quota.mjs",
+    "tray:smoke": "electron scripts/tray-smoke.mjs",
     "rebuild:node": "npm rebuild better-sqlite3",
     "rebuild:electron": "electron-rebuild -f -w better-sqlite3",
     "package:mac": "npm run rebuild:electron && electron-builder --mac --dir"
@@ -47,6 +48,12 @@
     "asarUnpack": [
       "**/*.node",
       "reporters/**"
+    ],
+    "extraResources": [
+      {
+        "from": "electron/assets",
+        "to": "."
+      }
     ],
     "files": [
       "dist/**",

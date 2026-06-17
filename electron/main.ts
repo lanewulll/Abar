@@ -24,6 +24,7 @@ app.on('second-instance', () => {
 
 app.whenReady().then(async () => {
   app.setName('Abar');
+  console.log('[Abar] app ready');
 
   db = new AbarDatabase(join(app.getPath('userData'), 'abar.sqlite'));
   ensureDefaultConfig(db);
@@ -56,7 +57,13 @@ app.whenReady().then(async () => {
     }
   };
 
-  createAbarTray(db, () => server.getStatus(), trayActions);
+  try {
+    createAbarTray(db, () => server.getStatus(), trayActions);
+    console.log('[Abar] tray setup complete');
+  } catch (error) {
+    console.error('[Abar] failed to create tray:', error);
+  }
+
   registerIpcHandlers({
     db,
     server,

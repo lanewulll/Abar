@@ -6,7 +6,7 @@ describe('formatTrayTitle', () => {
     expect(formatTrayTitle(undefined)).toBe('Abar');
   });
 
-  it('shows Codex quota percentage when available', () => {
-    expect(formatTrayTitle(78.4)).toBe('C 78%');
+  it('keeps the app name visible when quota percentage is available', () => {
+    expect(formatTrayTitle(78.4)).toBe('Abar 78%');
   });
 });

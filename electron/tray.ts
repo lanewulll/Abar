@@ -2,6 +2,7 @@ import { Menu, Tray, app, nativeImage } from 'electron';
 import type { AbarDatabase } from '../backend/db/db';
 import type { LocalServerStatus } from '../backend/types';
 import { deriveActivityStatus } from '../backend/codex/activityAnalyzer';
+import { resolveTrayIconPath } from './trayAssets';
 import { formatTrayTitle } from './trayTitle';
 
 type TrayActions = {
@@ -14,10 +15,13 @@ type TrayActions = {
 let tray: Tray | null = null;
 
 export function createAbarTray(db: AbarDatabase, getServerStatus: () => LocalServerStatus, actions: TrayActions): Tray {
+  console.log('[Abar] creating tray');
   tray = new Tray(createTrayImage());
+  console.log('[Abar] tray created');
   tray.setToolTip('Abar Codex Monitor');
   tray.on('click', actions.openDashboard);
   updateTray(db, getServerStatus, actions);
+  console.log('[Abar] tray context menu attached');
   return tray;
 }
 
@@ -70,12 +74,19 @@ export function updateTray(
 }
 
 function createTrayImage(): Electron.NativeImage {
-  const svg = encodeURIComponent(`
-    <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
-      <path d="M11.85 5.55c-.62-.5-1.4-.75-2.33-.75-2.05 0-3.45 1.58-3.45 4.14 0 2.57 1.38 4.19 3.47 4.19.96 0 1.78-.28 2.45-.85l.74 1.12c-.84.73-1.94 1.1-3.3 1.1-2.97 0-4.98-2.18-4.98-5.56 0-3.34 2.05-5.5 5.02-5.5 1.32 0 2.4.34 3.24 1.03l-.86 1.08Z" fill="#000"/>
-    </svg>
-  `);
-  const image = nativeImage.createFromDataURL(`data:image/svg+xml;charset=utf-8,${svg}`);
+  const iconPath = resolveTrayIconPath({
+    isPackaged: app.isPackaged,
+    appPath: app.getAppPath(),
+    resourcesPath: process.resourcesPath
+  });
+  const image = nativeImage.createFromPath(iconPath);
+  console.log('[Abar] tray icon path:', iconPath);
+  console.log('[Abar] tray image empty:', image.isEmpty());
+  console.log('[Abar] tray image size:', image.getSize());
+  if (image.isEmpty()) {
+    console.warn('[Abar] tray icon failed to load; falling back to empty image with visible title');
+    return nativeImage.createEmpty();
+  }
   image.setTemplateImage(true);
   return image;
 }
