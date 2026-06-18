@@ -6,8 +6,6 @@ import type {
 } from '../../backend/types';
 import type { HookInstallSnippet } from '../../backend/codex/hookInstaller';
 
-export type PageName = 'Overview' | 'Quota' | 'Skills' | 'Activity' | 'Settings';
-
 export type AppState = {
   config: {
     projectPath?: string;

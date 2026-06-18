@@ -6,7 +6,9 @@
   "type": "module",
   "main": "dist-electron/main/main.js",
   "scripts": {
-    "dev": "npm run rebuild:electron && electron-vite dev",
+    "dev": "node scripts/start-menubar.mjs",
+    "dev:electron": "npm run rebuild:electron && electron-vite dev",
+    "start:menubar": "node scripts/start-menubar.mjs",
     "build": "tsc --noEmit && electron-vite build",
     "preview": "electron-vite preview",
     "test": "npm run rebuild:node && vitest run",
@@ -63,6 +65,9 @@
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
+      "extendInfo": {
+        "LSUIElement": true
+      },
       "target": [
         "dmg",
         "zip"

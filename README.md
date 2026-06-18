@@ -1,11 +1,11 @@
 # Abar
 
-Abar is a Codex-only macOS menu bar monitor. It shows a small status bar entry and a local dashboard for Codex quota, configured project path, available skills, and recent hook activity.
+Abar is a Codex-only macOS menu bar monitor. It lives in the menu bar and opens a compact popover for Codex quota, configured project path, available skills, and recent hook activity.
 
 ## What v1 Does
 
-- Electron Tray entry with a compact native menu
-- React dashboard for Overview, Quota, Skills, Activity, and Settings
+- Electron Tray entry with a compact React popover
+- Menu-bar-only app behavior on macOS
 - Local SQLite cache in Electron `userData`
 - Skill scanning for project `.agents/skills`, user `~/.agents/skills`, and compatible `~/.codex/skills` locations
 - Optional quota refresh from Codex local auth state and ChatGPT's internal `wham/usage` endpoint
@@ -28,6 +28,14 @@ npm test
 npm run dev
 ```
 
+`npm run dev` builds the app, packages the local macOS `.app`, and opens the real menu bar app. Use this path for status bar testing because Electron's raw dev runner can report an invisible status item on macOS.
+
+For low-level Electron/Vite debugging only:
+
+```bash
+npm run dev:electron
+```
+
 If Electron download times out, retry with:
 
 ```bash
@@ -45,7 +53,7 @@ The packaged app is not signed or notarized in v1.
 
 ## Codex Hooks
 
-Open Abar Settings, copy the generated hook snippet, and merge it into `~/.codex/hooks.json` or the project `.codex/hooks.json`.
+Open the Abar menu bar popover, click the settings button, copy the generated hook snippet, and merge it into `~/.codex/hooks.json` or the project `.codex/hooks.json`.
 
 After editing hooks:
 

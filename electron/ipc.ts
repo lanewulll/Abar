@@ -1,4 +1,4 @@
-import { ipcMain, dialog, shell, clipboard } from 'electron';
+import { app, ipcMain, dialog, shell, clipboard } from 'electron';
 import { homedir } from 'node:os';
 import type { AbarDatabase } from '../backend/db/db';
 import { scanSkills } from '../backend/codex/skillScanner';
@@ -112,5 +112,10 @@ export function registerIpcHandlers(options: IpcOptions): void {
   ipcMain.handle('shell:openPath', async (_event, targetPath: string) => {
     const error = await shell.openPath(targetPath);
     return { ok: !error, error: error || undefined };
+  });
+
+  ipcMain.handle('app:quit', () => {
+    app.quit();
+    return { ok: true };
   });
 }

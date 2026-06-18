@@ -1,13 +1,11 @@
-import { app, BrowserWindow } from 'electron';
+import { app } from 'electron';
 import { optimizer } from '@electron-toolkit/utils';
 import { join } from 'node:path';
 import { AbarDatabase } from '../backend/db/db';
 import { LocalEventServer } from '../backend/localServer';
-import { scanSkills } from '../backend/codex/skillScanner';
-import { refreshQuotaSnapshot } from '../backend/codex/quotaProvider';
 import { createAbarTray, updateTray } from './tray';
-import { createMainWindow, showMainWindow } from './window';
 import { registerIpcHandlers } from './ipc';
+import { togglePopover } from './popover';
 
 let db: AbarDatabase;
 let server: LocalEventServer;
@@ -19,11 +17,14 @@ if (!gotLock) {
 }
 
 app.on('second-instance', () => {
-  showMainWindow();
+  refreshTray();
 });
 
 app.whenReady().then(async () => {
   app.setName('Abar');
+  if (process.platform === 'darwin') {
+    app.dock?.hide();
+  }
   console.log('[Abar] app ready');
 
   db = new AbarDatabase(join(app.getPath('userData'), 'abar.sqlite'));
@@ -40,21 +41,7 @@ app.whenReady().then(async () => {
   await server.start();
 
   const trayActions = {
-    openDashboard: () => showMainWindow(),
-    openSettings: () => showMainWindow('Settings'),
-    refreshQuota: async () => {
-      const snapshot = await refreshQuotaSnapshot();
-      db.insertQuotaSnapshot(snapshot);
-      refreshTray();
-    },
-    rescanSkills: async () => {
-      const result = await scanSkills({
-        projectPath: db.getProjectPath(),
-        userHomePath: app.getPath('home')
-      });
-      db.replaceSkills(result.skills);
-      refreshTray();
-    }
+    togglePopover
   };
 
   try {
@@ -87,11 +74,7 @@ app.on('before-quit', () => {
 });
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createMainWindow();
-  } else {
-    showMainWindow();
-  }
+  refreshTray();
 });
 
 function ensureDefaultConfig(database: AbarDatabase): void {
@@ -105,21 +88,7 @@ function refreshTray(): void {
     return;
   }
   updateTray(db, () => server.getStatus(), {
-    openDashboard: () => showMainWindow(),
-    openSettings: () => showMainWindow('Settings'),
-    refreshQuota: async () => {
-      const snapshot = await refreshQuotaSnapshot();
-      db.insertQuotaSnapshot(snapshot);
-      refreshTray();
-    },
-    rescanSkills: async () => {
-      const result = await scanSkills({
-        projectPath: db.getProjectPath(),
-        userHomePath: app.getPath('home')
-      });
-      db.replaceSkills(result.skills);
-      refreshTray();
-    }
+    togglePopover
   });
 }
 

@@ -2,11 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 const api = {
   getState: () => ipcRenderer.invoke('app:getState'),
-  onNavigate: (listener: (route: string) => void) => {
-    const wrapped = (_event: Electron.IpcRendererEvent, route: string): void => listener(route);
-    ipcRenderer.on('app:navigate', wrapped);
-    return () => ipcRenderer.removeListener('app:navigate', wrapped);
-  },
+  quit: () => ipcRenderer.invoke('app:quit'),
   config: {
     get: () => ipcRenderer.invoke('config:get'),
     setProjectPath: (projectPath: string) => ipcRenderer.invoke('config:setProjectPath', projectPath),
