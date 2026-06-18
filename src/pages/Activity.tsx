@@ -27,7 +27,7 @@ export function ActivityPage({ state, actions, busy }: ActivityProps): JSX.Eleme
           </button>
         </div>
       </section>
-      <ActivityTimeline events={state.events} />
+      <ActivityTimeline events={state.events} interactive />
     </div>
   );
 }

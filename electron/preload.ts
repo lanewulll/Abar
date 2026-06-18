@@ -1,7 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import { APP_STATE_CHANGED_CHANNEL } from './appEvents';
 
 const api = {
   getState: () => ipcRenderer.invoke('app:getState'),
+  onStateChanged: (listener: () => void) => {
+    const handler = () => listener();
+    ipcRenderer.on(APP_STATE_CHANGED_CHANNEL, handler);
+    return () => {
+      ipcRenderer.off(APP_STATE_CHANGED_CHANNEL, handler);
+    };
+  },
   quit: () => ipcRenderer.invoke('app:quit'),
   config: {
     get: () => ipcRenderer.invoke('config:get'),
@@ -21,8 +29,8 @@ const api = {
     createTest: () => ipcRenderer.invoke('events:createTest')
   },
   hooks: {
-    getInstallSnippet: () => ipcRenderer.invoke('hooks:getInstallSnippet'),
-    copyInstallSnippet: () => ipcRenderer.invoke('hooks:copyInstallSnippet')
+    getInstallPrompt: () => ipcRenderer.invoke('hooks:getInstallPrompt'),
+    copyInstallPrompt: () => ipcRenderer.invoke('hooks:copyInstallPrompt')
   },
   shell: {
     openPath: (targetPath: string) => ipcRenderer.invoke('shell:openPath', targetPath)

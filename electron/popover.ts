@@ -4,13 +4,11 @@ import { is } from '@electron-toolkit/utils';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { calculatePopoverPlacement } from './popoverGeometry';
+import { buildResetPopoverScrollScript } from './popoverScroll';
+import { POPOVER_SIZE } from './popoverSize';
 import { recoverRightEdgeStatusBounds } from './statusItemBounds';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const POPOVER_SIZE = {
-  width: 420,
-  height: 560
-};
 
 let popoverWindow: BrowserWindow | null = null;
 let ignoreBlurUntil = 0;
@@ -33,6 +31,13 @@ export function showPopover(tray: Tray, bounds?: Rectangle, position?: Point): B
   ignoreBlurUntil = Date.now() + 350;
   window.show();
   window.focus();
+  resetPopoverScroll(window);
+  return window;
+}
+
+export function showSettingsPopover(tray: Tray, bounds?: Rectangle, position?: Point): BrowserWindow {
+  const window = showPopover(tray, bounds, position);
+  showSettings(window);
   return window;
 }
 
@@ -175,6 +180,28 @@ function pointToTrayBounds(position?: Point): Rectangle | null {
 
 function syncArrowOffset(window: BrowserWindow): void {
   const script = `document.documentElement.style.setProperty('--popover-arrow-x', '${lastArrowOffsetX}px')`;
+  if (window.webContents.isLoading()) {
+    window.webContents.once('did-finish-load', () => {
+      void window.webContents.executeJavaScript(script).catch(() => undefined);
+    });
+    return;
+  }
+  void window.webContents.executeJavaScript(script).catch(() => undefined);
+}
+
+function resetPopoverScroll(window: BrowserWindow): void {
+  const script = buildResetPopoverScrollScript();
+  if (window.webContents.isLoading()) {
+    window.webContents.once('did-finish-load', () => {
+      void window.webContents.executeJavaScript(script).catch(() => undefined);
+    });
+    return;
+  }
+  void window.webContents.executeJavaScript(script).catch(() => undefined);
+}
+
+function showSettings(window: BrowserWindow): void {
+  const script = "window.location.hash = 'settings'; window.dispatchEvent(new HashChangeEvent('hashchange'))";
   if (window.webContents.isLoading()) {
     window.webContents.once('did-finish-load', () => {
       void window.webContents.executeJavaScript(script).catch(() => undefined);

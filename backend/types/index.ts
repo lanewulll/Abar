@@ -78,6 +78,17 @@ export type CodexEvent = {
   createdAt: string;
 };
 
+export type AgentRun = {
+  sessionId: string;
+  projectPath?: string;
+  startedAt?: string;
+  stoppedAt?: string;
+  source?: string;
+  status: 'running' | 'stopped' | 'unknown';
+  durationSeconds?: number;
+  lastEventAt: string;
+};
+
 export type AppConfig = {
   projectPath?: string;
   localServerPort: number;

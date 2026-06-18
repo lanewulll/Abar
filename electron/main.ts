@@ -1,15 +1,24 @@
-import { app } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import { optimizer } from '@electron-toolkit/utils';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { AbarDatabase } from '../backend/db/db';
 import { LocalEventServer } from '../backend/localServer';
+import { refreshQuotaSnapshot } from '../backend/codex/quotaProvider';
+import { scanSkills } from '../backend/codex/skillScanner';
 import { createAbarTray, updateTray } from './tray';
 import { registerIpcHandlers } from './ipc';
-import { togglePopover } from './popover';
+import { showSettingsPopover, togglePopover } from './popover';
+import { AUTO_REFRESH_INTERVALS_MS } from './trayBehavior';
+import { broadcastStateChanged } from './appEvents';
 
 let db: AbarDatabase;
 let server: LocalEventServer;
 let refreshTimer: NodeJS.Timeout | undefined;
+let quotaRefreshTimer: NodeJS.Timeout | undefined;
+let skillsRefreshTimer: NodeJS.Timeout | undefined;
+let quotaRefreshInFlight = false;
+let skillsRefreshInFlight = false;
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -32,16 +41,18 @@ app.whenReady().then(async () => {
 
   const reporterPath = getReporterPath();
   const serverPort = Number(db.getConfig('local_server_port') ?? 3987);
+
   server = new LocalEventServer({
     db,
     port: serverPort,
     eventSecret: db.getConfig('event_secret'),
-    onEvent: () => refreshTray()
+    onEvent: () => handleDataChanged()
   });
   await server.start();
 
   const trayActions = {
-    togglePopover
+    togglePopover,
+    showSettings: showSettingsPopover
   };
 
   try {
@@ -55,8 +66,11 @@ app.whenReady().then(async () => {
     db,
     server,
     reporterPath,
-    onDataChanged: () => refreshTray()
+    onDataChanged: () => handleDataChanged()
   });
+  void refreshMissingQuotaSnapshot();
+  void refreshSkillsSnapshot();
+  startAutoRefreshTimers();
 
   refreshTimer = setInterval(refreshTray, 30_000);
 
@@ -68,6 +82,12 @@ app.whenReady().then(async () => {
 app.on('before-quit', () => {
   if (refreshTimer) {
     clearInterval(refreshTimer);
+  }
+  if (quotaRefreshTimer) {
+    clearInterval(quotaRefreshTimer);
+  }
+  if (skillsRefreshTimer) {
+    clearInterval(skillsRefreshTimer);
   }
   void server?.stop();
   db?.close();
@@ -88,8 +108,73 @@ function refreshTray(): void {
     return;
   }
   updateTray(db, () => server.getStatus(), {
-    togglePopover
+    togglePopover,
+    showSettings: showSettingsPopover
   });
+}
+
+function handleDataChanged(): void {
+  refreshTray();
+  broadcastStateChanged(BrowserWindow.getAllWindows());
+}
+
+async function refreshMissingQuotaSnapshot(): Promise<void> {
+  if (!db || db.getLatestQuotaSnapshot()) {
+    return;
+  }
+
+  await refreshQuotaSnapshotAndTray();
+}
+
+function startAutoRefreshTimers(): void {
+  quotaRefreshTimer = setInterval(
+    () => void refreshQuotaSnapshotAndTray(),
+    AUTO_REFRESH_INTERVALS_MS.quota
+  );
+  skillsRefreshTimer = setInterval(
+    () => void refreshSkillsSnapshot(),
+    AUTO_REFRESH_INTERVALS_MS.skills
+  );
+}
+
+async function refreshQuotaSnapshotAndTray(): Promise<void> {
+  if (!db || quotaRefreshInFlight) {
+    return;
+  }
+
+  quotaRefreshInFlight = true;
+  try {
+    const snapshot = await refreshQuotaSnapshot();
+    db.insertQuotaSnapshot(snapshot);
+    handleDataChanged();
+  } catch (error) {
+    console.error('[Abar] failed to refresh quota:', error);
+  } finally {
+    quotaRefreshInFlight = false;
+  }
+}
+
+async function refreshSkillsSnapshot(): Promise<void> {
+  if (!db || skillsRefreshInFlight) {
+    return;
+  }
+
+  skillsRefreshInFlight = true;
+  try {
+    const result = await scanSkills({
+      projectPath: db.getProjectPath(),
+      userHomePath: homedir()
+    });
+    db.replaceSkills(result.skills);
+    handleDataChanged();
+    if (result.errors.length > 0) {
+      console.warn(`[Abar] skill scan completed with ${result.errors.length} warning(s)`);
+    }
+  } catch (error) {
+    console.error('[Abar] failed to refresh skills:', error);
+  } finally {
+    skillsRefreshInFlight = false;
+  }
 }
 
 function getReporterPath(): string {

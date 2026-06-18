@@ -1,10 +1,11 @@
 import type {
+  AgentRun,
   CodexEvent,
   LocalServerStatus,
   QuotaSnapshot,
   SkillInfo
 } from '../../backend/types';
-import type { HookInstallSnippet } from '../../backend/codex/hookInstaller';
+import type { HookInstallPrompt, HookInstallSnippet } from '../../backend/codex/hookInstaller';
 
 export type AppState = {
   config: {
@@ -15,6 +16,7 @@ export type AppState = {
   quota?: QuotaSnapshot;
   skills: SkillInfo[];
   events: CodexEvent[];
+  agentRuns: AgentRun[];
 };
 
 export type Notice = {
@@ -22,4 +24,4 @@ export type Notice = {
   message: string;
 };
 
-export type { CodexEvent, HookInstallSnippet, QuotaSnapshot, SkillInfo };
+export type { AgentRun, CodexEvent, HookInstallPrompt, HookInstallSnippet, QuotaSnapshot, SkillInfo };

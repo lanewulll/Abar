@@ -1,13 +1,20 @@
-import { Tray, app, nativeImage } from 'electron';
+import { Menu, Tray, app, nativeImage } from 'electron';
 import type { Point, Rectangle } from 'electron';
 import type { AbarDatabase } from '../backend/db/db';
 import type { LocalServerStatus } from '../backend/types';
 import { deriveActivityStatus } from '../backend/codex/activityAnalyzer';
 import { resolveTrayIconPath } from './trayAssets';
 import { formatTrayTitle } from './trayTitle';
+import {
+  shouldOpenNativeMenuForTrayEvent,
+  shouldOpenPopoverForMouseUpEvent,
+  shouldOpenPopoverForTrayEvent,
+  shouldUseNativeTrayMenu
+} from './trayBehavior';
 
 type TrayActions = {
   togglePopover: (tray: Tray, bounds?: Rectangle, position?: Point) => void;
+  showSettings: (tray: Tray) => void;
 };
 
 type TrayWithMouseUp = Tray & {
@@ -30,11 +37,22 @@ export function createAbarTray(db: AbarDatabase, getServerStatus: () => LocalSer
     lastTrayActivationAt = now;
     actions.togglePopover(tray as Tray, bounds, position);
   };
-  tray.on('click', (_event, bounds, position) => activateTray(bounds, position));
-  (tray as TrayWithMouseUp).on('mouse-up', (_event: unknown, bounds: Rectangle, position?: Point) =>
-    activateTray(bounds, position)
-  );
-  tray.on('right-click', (_event, bounds) => activateTray(bounds));
+  const nativeTrayMenu = shouldUseNativeTrayMenu() ? createTrayContextMenu(actions) : null;
+  tray.on('click', (_event, bounds, position) => {
+    if (shouldOpenPopoverForTrayEvent('click')) {
+      activateTray(bounds, position);
+    }
+  });
+  tray.on('right-click', () => {
+    if (nativeTrayMenu && shouldOpenNativeMenuForTrayEvent('right-click')) {
+      tray?.popUpContextMenu(nativeTrayMenu);
+    }
+  });
+  (tray as TrayWithMouseUp).on('mouse-up', (event: unknown, bounds: Rectangle, position?: Point) => {
+    if (shouldOpenPopoverForTrayEvent('mouse-up') && shouldOpenPopoverForMouseUpEvent(event)) {
+      activateTray(bounds, position);
+    }
+  });
   updateTray(db, getServerStatus, actions);
   console.log('[Abar] tray click handler attached');
   return tray;
@@ -78,6 +96,23 @@ function createTrayImage(): Electron.NativeImage {
   }
   image.setTemplateImage(false);
   return image;
+}
+
+function createTrayContextMenu(actions: TrayActions): Menu {
+  return Menu.buildFromTemplate([
+    {
+      label: 'Settings',
+      click: () => {
+        if (tray) {
+          actions.showSettings(tray);
+        }
+      }
+    },
+    {
+      label: 'Quit Abar',
+      click: () => app.quit()
+    }
+  ]);
 }
 
 function compactPath(value: string): string {

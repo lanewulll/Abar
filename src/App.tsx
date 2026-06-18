@@ -1,45 +1,42 @@
 import {
-  Activity,
   AlertCircle,
-  BatteryCharging,
   Bolt,
   CheckCircle2,
   Copy,
-  FolderOpen,
-  Gauge,
-  Power,
-  RefreshCcw,
-  RotateCw,
-  Settings,
-  Sparkles
+  FolderOpen
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { AppState, HookInstallSnippet, Notice } from './types/app';
-import type { ActivityStatus, UsageWindow } from '../backend/types';
-import { ActivityTimeline } from './components/ActivityTimeline';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { AppState, HookInstallPrompt, Notice } from './types/app';
+import type { AgentRun, UsageWindow } from '../backend/types';
 import {
-  compactPath,
+  formatAgentRunDuration,
+  formatAgentRunLine,
   formatPercent,
   formatReset,
-  latestToolCall,
+  mainMetricTiles,
+  noticePlacement,
   quotaWindow,
-  statusFromEvents
+  quotaRefreshNotice,
+  serverSettingsSummary,
+  shouldAutoRefreshQuota
 } from './utils/format';
 
 const fallbackState: AppState = {
   config: { localServerPort: 3987 },
   server: { listening: false, host: '127.0.0.1', port: 3987, error: 'Electron preload unavailable' },
   skills: [],
-  events: []
+  events: [],
+  agentRuns: []
 };
 
 export default function App(): JSX.Element {
   const [state, setState] = useState<AppState>(fallbackState);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(() => window.location.hash === '#settings');
   const [projectPath, setProjectPath] = useState('');
-  const [snippet, setSnippet] = useState<HookInstallSnippet | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<HookInstallPrompt | null>(null);
+  const autoQuotaRefreshRequested = useRef(false);
   const api = typeof window !== 'undefined' ? window.abar : undefined;
 
   const refreshState = useCallback(async () => {
@@ -59,12 +56,30 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     if (!api) {
+      return undefined;
+    }
+    return api.onStateChanged(() => {
+      void refreshState();
+    });
+  }, [api, refreshState]);
+
+  useEffect(() => {
+    const syncSettingsHash = () => {
+      setSettingsOpen(window.location.hash === '#settings');
+    };
+    window.addEventListener('hashchange', syncSettingsHash);
+    syncSettingsHash();
+    return () => window.removeEventListener('hashchange', syncSettingsHash);
+  }, []);
+
+  useEffect(() => {
+    if (!api) {
       return;
     }
     let mounted = true;
-    void api.hooks.getInstallSnippet().then((value) => {
+    void api.hooks.getInstallPrompt().then((value) => {
       if (mounted) {
-        setSnippet(value as HookInstallSnippet);
+        setInstallPrompt(value as HookInstallPrompt);
       }
     });
     return () => {
@@ -79,23 +94,20 @@ export default function App(): JSX.Element {
         setBusy('quota');
         try {
           const quota = await api.quota.refresh();
-          setNotice({ tone: quota.error ? 'error' : 'success', message: quota.error ? quota.error : 'Quota refreshed.' });
+          const nextNotice = quotaRefreshNotice(quota, false);
+          setNotice(nextNotice);
           await refreshState();
         } finally {
           setBusy(null);
         }
       },
-      rescanSkills: async () => {
+      refreshQuotaSilently: async () => {
         if (!api) return;
-        setBusy('skills');
+        setBusy('quota');
         try {
-          const result = await api.skills.rescan();
-          setNotice({
-            tone: result.errors?.length ? 'error' : 'success',
-            message: result.errors?.length
-              ? `Scanned with ${result.errors.length} warning(s).`
-              : `Scanned ${result.skills.length} skill(s).`
-          });
+          const quota = await api.quota.refresh();
+          const nextNotice = quotaRefreshNotice(quota, true);
+          setNotice(nextNotice);
           await refreshState();
         } finally {
           setBusy(null);
@@ -117,97 +129,53 @@ export default function App(): JSX.Element {
       },
       copyHookSnippet: async () => {
         if (!api) return;
-        await api.hooks.copyInstallSnippet();
-        setNotice({ tone: 'success', message: 'Hook snippet copied.' });
-      },
-      createTestEvent: async () => {
-        if (!api) return;
-        setBusy('event');
-        try {
-          await api.events.createTest();
-          setNotice({ tone: 'success', message: 'Test event recorded.' });
-          await refreshState();
-        } finally {
-          setBusy(null);
-        }
-      },
-      quit: async () => {
-        if (!api) return;
-        await api.quit();
+        await api.hooks.copyInstallPrompt();
+        setNotice({ tone: 'success', message: 'Install prompt copied. Paste it into Codex, then trust in /hooks.' });
       }
     }),
     [api, projectPath, refreshState]
   );
 
-  const status = statusFromEvents(state.events);
-  const recentTool = latestToolCall(state.events);
+  useEffect(() => {
+    if (!api || autoQuotaRefreshRequested.current || !shouldAutoRefreshQuota(state.quota) || busy === 'quota') {
+      return;
+    }
+    autoQuotaRefreshRequested.current = true;
+    void actions.refreshQuotaSilently();
+  }, [actions, api, busy, state.quota]);
+
+  const placement = noticePlacement(notice);
+  const metrics = mainMetricTiles(state.skills.length, state.agentRuns.length);
+  const serverSummary = serverSettingsSummary(state.server);
   const fiveHour = quotaWindow(state.quota, '5h');
   const weekly = quotaWindow(state.quota, 'weekly');
 
   return (
     <main className="popover-shell">
       <div className="popover-arrow" />
-      <header className="popover-header">
-        <div>
-          <p className="eyebrow">Abar</p>
-          <h1>Codex Monitor</h1>
-        </div>
-        <button
-          className="icon-button glass-button"
-          type="button"
-          title="Settings"
-          onClick={() => setSettingsOpen((value) => !value)}
-        >
-          <Settings size={18} />
-        </button>
-      </header>
+      {placement === 'header' && notice ? <CompactNotice notice={notice} onDismiss={() => setNotice(null)} /> : null}
 
       <div className="popover-content">
-        {notice ? (
+        {placement === 'content' && notice ? (
           <button className={`notice ${notice.tone}`} type="button" onClick={() => setNotice(null)}>
             {notice.tone === 'error' ? <AlertCircle size={15} /> : <CheckCircle2 size={15} />}
             <span>{notice.message}</span>
           </button>
         ) : null}
 
-        <section className="status-panel">
-          <div>
-            <p className="eyebrow">Status</p>
-            <h2>Codex is {status.toLowerCase()}</h2>
-            <p>
-              {recentTool ? `${recentTool.toolName ?? recentTool.eventType} · ${recentTool.eventType}` : 'Waiting for hook events.'}
-            </p>
-          </div>
-          <StatusOrb status={status} />
-        </section>
-
         <section className="quota-stack">
-          <CompactQuotaCard title="5h limit" icon={<Gauge size={17} />} window={fiveHour} error={state.quota?.error} />
-          <CompactQuotaCard title="Weekly" icon={<BatteryCharging size={17} />} window={weekly} error={state.quota?.error} />
+          <CompactQuotaCard title="5h limit" icon={<LimitIcon />} window={fiveHour} error={state.quota?.error} />
+          <CompactQuotaCard title="Weekly" icon={<WeeklyIcon />} window={weekly} error={state.quota?.error} />
         </section>
 
         <section className="metric-grid">
-          <MetricTile icon={<Sparkles size={16} />} label="Skills" value={String(state.skills.length)} />
-          <MetricTile icon={<Activity size={16} />} label="Events" value={String(state.events.length)} />
-          <MetricTile
-            icon={<Bolt size={16} />}
-            label="Server"
-            value={state.server.listening ? `${state.server.port}` : 'Off'}
-            tone={state.server.listening ? 'good' : 'warn'}
-          />
+          {metrics.map((metric) => (
+            <MetricTile key={metric.key} icon={metricIcon(metric.key)} label={metric.label} value={metric.value} />
+          ))}
         </section>
 
         <section className="panel-block activity-block">
-          <div className="section-header">
-            <div>
-              <h2>Recent Activity</h2>
-              <p>{compactPath(state.config.projectPath)}</p>
-            </div>
-            <button className="mini-button" type="button" onClick={actions.createTestEvent} disabled={busy === 'event'}>
-              Test
-            </button>
-          </div>
-          <ActivityTimeline events={state.events.slice(0, 4)} />
+          <AgentRunList runs={state.agentRuns} />
         </section>
 
         {settingsOpen ? (
@@ -215,13 +183,18 @@ export default function App(): JSX.Element {
             <div className="section-header">
               <div>
                 <h2>Setup</h2>
-                <p>{snippet?.targetFile ?? '~/.codex/hooks.json'}</p>
+                <p>{installPrompt?.targetFile ?? '~/.codex/hooks.json'}</p>
               </div>
               <button className="mini-button" type="button" onClick={actions.copyHookSnippet}>
                 <Copy size={14} />
-                Copy hook
+                Copy install
               </button>
             </div>
+            <button className="full-button prompt-button" type="button" onClick={actions.copyHookSnippet}>
+              <Copy size={15} />
+              Copy install prompt
+            </button>
+            <ServerSettingsRow summary={serverSummary} />
             <div className="field-row">
               <input value={projectPath} onChange={(event) => setProjectPath(event.target.value)} placeholder="/Users/name/project" />
               <button className="icon-button" type="button" title="Choose folder" onClick={actions.chooseProjectPath}>
@@ -235,21 +208,97 @@ export default function App(): JSX.Element {
         ) : null}
       </div>
 
-      <footer className="popover-actions">
-        <button type="button" onClick={actions.refreshQuota} disabled={busy === 'quota'}>
-          <RefreshCcw size={16} />
-          Quota
-        </button>
-        <button type="button" onClick={actions.rescanSkills} disabled={busy === 'skills'}>
-          <RotateCw size={16} />
-          Skills
-        </button>
-        <button type="button" onClick={actions.quit}>
-          <Power size={16} />
-          Quit
-        </button>
-      </footer>
     </main>
+  );
+}
+
+function CompactNotice({ notice, onDismiss }: { notice: Notice; onDismiss: () => void }): JSX.Element {
+  return (
+    <button className={`compact-notice ${notice.tone}`} type="button" onClick={onDismiss} title={notice.message}>
+      {notice.tone === 'error' ? <AlertCircle size={13} /> : <CheckCircle2 size={13} />}
+      <span>{notice.message}</span>
+    </button>
+  );
+}
+
+function metricIcon(key: 'skills' | 'events'): JSX.Element {
+  return key === 'skills' ? <SkillsIcon /> : <EventsIcon />;
+}
+
+function IconSvg({ children }: { children: ReactNode }): JSX.Element {
+  return (
+    <svg
+      className="app-icon"
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {children}
+    </svg>
+  );
+}
+
+function LimitIcon(): JSX.Element {
+  return (
+    <IconSvg>
+      <path d="M3.2 9.7a4.8 4.8 0 0 1 9.6 0" />
+      <path d="M8 8.8 10.4 6" />
+      <path d="M3.8 5.9 2.7 4.8" />
+      <path d="M12.2 5.9 13.3 4.8" />
+      <path d="M8 4.9V3.3" />
+    </IconSvg>
+  );
+}
+
+function WeeklyIcon(): JSX.Element {
+  return (
+    <IconSvg>
+      <path d="M4.1 5.1H2.7v5.8h1.4" />
+      <path d="M11.9 5.1h1.4v5.8h-1.4" />
+      <path d="M6.2 11.1 4.9 8l1.3-3.1" />
+      <path d="M9.8 4.9 11.1 8l-1.3 3.1" />
+      <path d="M7.4 10.9 8.6 5.1" />
+    </IconSvg>
+  );
+}
+
+function SkillsIcon(): JSX.Element {
+  return (
+    <IconSvg>
+      <path d="M8 2.8v3" />
+      <path d="M8 10.2v3" />
+      <path d="M2.8 8h3" />
+      <path d="M10.2 8h3" />
+      <path d="M4.8 4.8 6 6" />
+      <path d="M10 10l1.2 1.2" />
+      <circle cx="8" cy="8" r="1.35" />
+    </IconSvg>
+  );
+}
+
+function EventsIcon(): JSX.Element {
+  return (
+    <IconSvg>
+      <path d="M2.6 8h2l1.1-3.4 2.1 7 1.5-5.2 1.1 1.6h3" />
+      <circle cx="5.7" cy="4.6" r=".55" />
+      <circle cx="7.8" cy="11.6" r=".55" />
+    </IconSvg>
+  );
+}
+
+function ServerSettingsRow({ summary }: { summary: ReturnType<typeof serverSettingsSummary> }): JSX.Element {
+  return (
+    <div className={`server-settings-row ${summary.tone}`}>
+      <Bolt size={15} />
+      <div>
+        <strong>Server</strong>
+        <p>{summary.detail}</p>
+      </div>
+      <span>{summary.value}</span>
+    </div>
   );
 }
 
@@ -269,13 +318,15 @@ function CompactQuotaCard({
     <article className="quota-strip">
       <div className="quota-label">
         {icon}
-        <strong>{title}</strong>
+        <div className="quota-copy">
+          <strong>{title}</strong>
+          <p>{window ? formatReset(window) : error ?? 'Not configured'}</p>
+        </div>
       </div>
       <span>{formatPercent(window?.usedPercent)}</span>
       <div className="meter">
         <div style={{ width: `${Math.max(0, Math.min(100, used))}%` }} />
       </div>
-      <p>{window ? formatReset(window) : error ?? 'Not configured'}</p>
     </article>
   );
 }
@@ -300,11 +351,23 @@ function MetricTile({
   );
 }
 
-function StatusOrb({ status }: { status: ActivityStatus }): JSX.Element {
+function AgentRunList({ runs }: { runs: AgentRun[] }): JSX.Element {
+  if (runs.length === 0) {
+    return <p className="empty-state">No agent runs recorded yet.</p>;
+  }
+
   return (
-    <div className={`status-orb ${status.toLowerCase().replace(/\s+/g, '-')}`}>
-      <span />
-      {status}
+    <div className="agent-run-list">
+      {runs.map((run) => (
+        <div className={`agent-run-row ${run.status}`} key={run.sessionId}>
+          <span className={`event-dot ${run.status === 'running' ? '' : 'success'}`} />
+          <div>
+            <strong>{formatAgentRunLine(run)}</strong>
+            <p>{run.sessionId.slice(0, 8)}</p>
+          </div>
+          <time>{formatAgentRunDuration(run)}</time>
+        </div>
+      ))}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { Copy, FolderOpen, Save } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import type { AppState, HookInstallSnippet } from '../types/app';
+import type { AppState, HookInstallPrompt } from '../types/app';
 
 type SettingsProps = {
   state: AppState;
@@ -14,7 +14,7 @@ type SettingsProps = {
 
 export function SettingsPage({ state, actions }: SettingsProps): JSX.Element {
   const [projectPath, setProjectPath] = useState(state.config.projectPath ?? '');
-  const [snippet, setSnippet] = useState<HookInstallSnippet | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<HookInstallPrompt | null>(null);
 
   useEffect(() => {
     setProjectPath(state.config.projectPath ?? '');
@@ -22,9 +22,9 @@ export function SettingsPage({ state, actions }: SettingsProps): JSX.Element {
 
   useEffect(() => {
     let mounted = true;
-    void window.abar.hooks.getInstallSnippet().then((value) => {
+    void window.abar.hooks.getInstallPrompt().then((value) => {
       if (mounted) {
-        setSnippet(value as HookInstallSnippet);
+        setInstallPrompt(value as HookInstallPrompt);
       }
     });
     return () => {
@@ -61,15 +61,15 @@ export function SettingsPage({ state, actions }: SettingsProps): JSX.Element {
       <section className="surface">
         <div className="section-header">
           <div>
-            <h2>Codex Hook</h2>
-            <p className="muted">{snippet?.targetFile ?? '~/.codex/hooks.json'}</p>
+            <h2>Codex Hook Install Prompt</h2>
+            <p className="muted">{installPrompt?.targetFile ?? '~/.codex/hooks.json'}</p>
           </div>
           <button type="button" onClick={actions.copyHookSnippet}>
             <Copy size={16} />
-            Copy
+            Copy Install
           </button>
         </div>
-        <pre className="snippet">{snippet?.hooksJson ?? 'Loading hook snippet...'}</pre>
+        <pre className="snippet">{installPrompt?.promptText ?? 'Loading install prompt...'}</pre>
       </section>
     </div>
   );

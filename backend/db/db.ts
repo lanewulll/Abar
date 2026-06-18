@@ -2,7 +2,7 @@ import { dirname, basename } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import Database from 'better-sqlite3';
 import { schemaSql } from './schema';
-import type { CodexEvent, QuotaSnapshot, SkillInfo } from '../types';
+import type { AgentRun, CodexEvent, QuotaSnapshot, SkillInfo } from '../types';
 import { safeJsonParse, safeJsonStringify } from '../utils/sanitize';
 
 type DbRow = Record<string, unknown>;
@@ -153,6 +153,72 @@ export class AbarDatabase {
     }));
   }
 
+  listRecentAgentRuns(limit: number): AgentRun[] {
+    const rows = this.db
+      .prepare(
+        `SELECT event_type, project_path, session_id, payload_json, created_at
+         FROM events
+         WHERE event_type IN ('SessionStart', 'Stop')
+           AND session_id IS NOT NULL
+         ORDER BY created_at ASC`
+      )
+      .all() as DbRow[];
+
+    const runs: AgentRun[] = [];
+    const openRuns = new Map<string, AgentRun>();
+    for (const row of rows) {
+      const sessionId = String(row.session_id);
+      const eventType = String(row.event_type);
+      const createdAt = String(row.created_at);
+      const projectPath = typeof row.project_path === 'string' ? row.project_path : undefined;
+
+      if (eventType === 'SessionStart') {
+        const previousOpenRun = openRuns.get(sessionId);
+        if (previousOpenRun) {
+          runs.push(finalizeAgentRun(previousOpenRun));
+        }
+        const payload = safeJsonParse<Record<string, unknown>>(String(row.payload_json ?? '{}'), {});
+        openRuns.set(sessionId, {
+          sessionId,
+          ...(projectPath ? { projectPath } : {}),
+          startedAt: createdAt,
+          ...(typeof payload.source === 'string' ? { source: payload.source } : {}),
+          status: 'running',
+          lastEventAt: createdAt
+        });
+        continue;
+      }
+
+      const openRun = openRuns.get(sessionId);
+      if (openRun) {
+        openRuns.delete(sessionId);
+        runs.push(
+          finalizeAgentRun({
+            ...openRun,
+            ...(openRun.projectPath || !projectPath ? {} : { projectPath }),
+            stoppedAt: createdAt,
+            lastEventAt: createdAt
+          })
+        );
+        continue;
+      }
+
+      runs.push(
+        finalizeAgentRun({
+          sessionId,
+          ...(projectPath ? { projectPath } : {}),
+          stoppedAt: createdAt,
+          status: 'unknown',
+          lastEventAt: createdAt
+        })
+      );
+    }
+
+    runs.push(...[...openRuns.values()].map((run) => finalizeAgentRun(run)));
+
+    return runs.sort((left, right) => right.lastEventAt.localeCompare(left.lastEventAt)).slice(0, limit);
+  }
+
   insertQuotaSnapshot(snapshot: QuotaSnapshot): void {
     this.db
       .prepare(
@@ -182,4 +248,17 @@ export class AbarDatabase {
 
 function stableProjectId(projectPath: string): string {
   return Buffer.from(projectPath).toString('base64url');
+}
+
+function finalizeAgentRun(run: AgentRun): AgentRun {
+  const status = run.stoppedAt ? 'stopped' : run.startedAt ? 'running' : 'unknown';
+  const durationSeconds =
+    run.startedAt && run.stoppedAt
+      ? Math.max(0, Math.round((new Date(run.stoppedAt).getTime() - new Date(run.startedAt).getTime()) / 1000))
+      : undefined;
+  return {
+    ...run,
+    status,
+    ...(typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) ? { durationSeconds } : {})
+  };
 }

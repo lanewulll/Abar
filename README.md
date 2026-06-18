@@ -53,12 +53,12 @@ The packaged app is not signed or notarized in v1.
 
 ## Codex Hooks
 
-Open the Abar menu bar popover, click the settings button, copy the generated hook snippet, and merge it into `~/.codex/hooks.json` or the project `.codex/hooks.json`.
+Open the Abar menu bar popover and click **Copy install**. Paste that prompt into Codex so Codex can merge the Abar hooks into `~/.codex/hooks.json`.
 
-After editing hooks:
+After Codex edits hooks:
 
-1. Restart Codex or open `/hooks`.
-2. Review and trust the Abar hook definitions.
+1. Open `/hooks` in Codex.
+2. Review and trust the Abar hook definitions yourself. Abar and Codex cannot silently bypass this trust step.
 3. Keep Abar running while using Codex.
 
 The reporter sends only to `127.0.0.1` and exits successfully if Abar is not available.

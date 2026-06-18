@@ -5,7 +5,7 @@ import { scanSkills } from '../backend/codex/skillScanner';
 import { refreshQuotaSnapshot } from '../backend/codex/quotaProvider';
 import { normalizeCodexHookPayload } from '../backend/codex/activityAnalyzer';
 import type { LocalEventServer } from '../backend/localServer';
-import { generateHookInstallSnippet } from '../backend/codex/hookInstaller';
+import { generateHookInstallPrompt } from '../backend/codex/hookInstaller';
 
 export type IpcOptions = {
   db: AbarDatabase;
@@ -23,7 +23,8 @@ export function registerIpcHandlers(options: IpcOptions): void {
     server: options.server.getStatus(),
     quota: options.db.getLatestQuotaSnapshot(),
     skills: options.db.listSkills(),
-    events: options.db.listRecentEvents(50)
+    events: options.db.listRecentEvents(50),
+    agentRuns: options.db.listRecentAgentRuns(5)
   }));
 
   ipcMain.handle('config:get', () => ({
@@ -89,8 +90,8 @@ export function registerIpcHandlers(options: IpcOptions): void {
     return event;
   });
 
-  ipcMain.handle('hooks:getInstallSnippet', () =>
-    generateHookInstallSnippet({
+  ipcMain.handle('hooks:getInstallPrompt', () =>
+    generateHookInstallPrompt({
       reporterPath: options.reporterPath,
       port: Number(options.db.getConfig('local_server_port') ?? 3987),
       eventSecret: options.db.getConfig('event_secret'),
@@ -98,14 +99,14 @@ export function registerIpcHandlers(options: IpcOptions): void {
     })
   );
 
-  ipcMain.handle('hooks:copyInstallSnippet', () => {
-    const snippet = generateHookInstallSnippet({
+  ipcMain.handle('hooks:copyInstallPrompt', () => {
+    const prompt = generateHookInstallPrompt({
       reporterPath: options.reporterPath,
       port: Number(options.db.getConfig('local_server_port') ?? 3987),
       eventSecret: options.db.getConfig('event_secret'),
       homePath: homedir()
     });
-    clipboard.writeText(snippet.hooksJson);
+    clipboard.writeText(prompt.promptText);
     return { ok: true };
   });
 

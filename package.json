@@ -17,7 +17,7 @@
     "tray:smoke": "electron scripts/tray-smoke.mjs",
     "rebuild:node": "npm rebuild better-sqlite3",
     "rebuild:electron": "electron-rebuild -f -w better-sqlite3",
-    "package:mac": "npm run rebuild:electron && electron-builder --mac --dir"
+    "package:mac": "npm run build && npm run rebuild:electron && electron-builder --mac --dir"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",

@@ -3,6 +3,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { findAbarProcessIds } from './startMenubarProcessFilter.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const appPath = resolve(repoRoot, 'dist/mac-arm64/Abar.app');
@@ -33,23 +34,11 @@ function stopExistingAbar() {
   spawnSync('osascript', ['-e', 'tell application "Abar" to quit'], { stdio: 'ignore' });
 
   const processList = output('ps', ['-axo', 'pid,command']);
-  const killTargets = processList
-    .split('\n')
-    .filter((line) => {
-      if (!line.includes(repoRoot)) {
-        return false;
-      }
-      return (
-        line.includes('electron-vite dev') ||
-        line.includes('npm run dev:electron') ||
-        line.includes('node_modules/electron/dist/Electron.app/Contents/MacOS/Electron .')
-      );
-    })
-    .map((line) => Number(line.trim().split(/\s+/, 1)[0]))
-    .filter((pid) => Number.isInteger(pid) && pid > 0 && pid !== process.pid);
+  const killTargets = findAbarProcessIds(processList, repoRoot, process.pid);
 
   if (killTargets.length > 0) {
     spawnSync('kill', killTargets.map(String), { stdio: 'ignore' });
+    spawnSync('kill', ['-9', ...killTargets.map(String)], { stdio: 'ignore' });
   }
 }
 
