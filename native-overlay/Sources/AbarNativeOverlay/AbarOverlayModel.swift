@@ -11,17 +11,24 @@ final class AbarOverlayModel: ObservableObject {
 
     private let reader: AbarDatabaseReader
     private let conversationMonitor = ChatConversationActivityMonitor()
+    private let taskNavigator = TaskNavigator()
     private let databasePath: String
     private let onCompletionPulse: () -> Void
+    private let onTaskJump: () -> Void
+    private let onStateChanged: (AbarActivityState) -> Void
     private var completionPulseDetector = AbarTaskCompletionPulseDetector()
     private var timer: Timer?
 
     init(
         databasePath: String = AbarOverlayModel.defaultDatabasePath(),
-        onCompletionPulse: @escaping () -> Void = {}
+        onCompletionPulse: @escaping () -> Void = {},
+        onTaskJump: @escaping () -> Void = {},
+        onStateChanged: @escaping (AbarActivityState) -> Void = { _ in }
     ) {
         self.databasePath = databasePath
         self.onCompletionPulse = onCompletionPulse
+        self.onTaskJump = onTaskJump
+        self.onStateChanged = onStateChanged
         reader = AbarDatabaseReader(databasePath: databasePath)
     }
 
@@ -65,25 +72,16 @@ final class AbarOverlayModel: ObservableObject {
             errorMessage = "Waiting for Abar data at \(databasePath): \(error)"
         }
         conversationTask = conversationMonitor.currentTask()
+        onStateChanged(displayedActivityState)
     }
 
     func setExpanded(_ expanded: Bool) {
         isExpanded = expanded
     }
 
-    func activateCodex() {
-        let bundleIdentifier = "com.openai.codex"
-        if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).first {
-            app.activate(options: [.activateAllWindows])
-            return
-        }
-
-        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) {
-            NSWorkspace.shared.openApplication(
-                at: url,
-                configuration: NSWorkspace.OpenConfiguration()
-            )
-        }
+    func activate(task: AbarTaskSummary) {
+        taskNavigator.activate(task: task)
+        onTaskJump()
     }
 
     static func defaultDatabasePath() -> String {

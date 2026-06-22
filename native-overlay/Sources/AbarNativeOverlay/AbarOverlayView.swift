@@ -32,8 +32,8 @@ struct AbarOverlayView: View {
                     MetricPill(title: "Events", value: "\(model.snapshot.eventsCount)")
                 }
 
-                TaskList(tasks: model.displayedTasks) {
-                    model.activateCodex()
+                TaskList(tasks: model.displayedTasks) { task in
+                    model.activate(task: task)
                 }
             }
             .padding(.horizontal, 18)
@@ -107,7 +107,7 @@ private struct MetricPill: View {
 
 private struct TaskList: View {
     let tasks: [AbarTaskSummary]
-    let onJump: () -> Void
+    let onJump: (AbarTaskSummary) -> Void
 
     var body: some View {
         VStack(spacing: 6) {
@@ -141,7 +141,7 @@ private struct EmptyTaskRow: View {
 
 private struct TaskRow: View {
     let task: AbarTaskSummary
-    let onJump: () -> Void
+    let onJump: (AbarTaskSummary) -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -170,13 +170,17 @@ private struct TaskRow: View {
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
         case .completed:
-            Button(action: onJump) {
+            Button {
+                onJump(task)
+            } label: {
                 Image(systemName: "arrow.up.forward.square")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
+                    .frame(width: 44, height: 28)
+                    .contentShape(Rectangle())
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
             .controlSize(.small)
-            .accessibilityLabel("Open Codex")
+            .accessibilityLabel("Open task")
         }
     }
 

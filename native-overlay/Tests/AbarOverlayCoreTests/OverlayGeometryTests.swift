@@ -70,7 +70,7 @@ final class OverlayGeometryTests: XCTestCase {
 
         XCTAssertEqual(
             OverlayGeometry.completionGlowFrame(on: screen),
-            CGRect(x: 666, y: 934, width: 180, height: 48)
+            CGRect(x: 606, y: 904, width: 300, height: 78)
         )
     }
 }

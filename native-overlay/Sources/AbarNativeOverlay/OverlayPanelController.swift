@@ -5,13 +5,25 @@ import SwiftUI
 @MainActor
 final class OverlayPanelController {
     private var panel: AbarOverlayPanel?
-    private lazy var model = AbarOverlayModel { [weak self] in
-        self?.showCompletionGlow()
-    }
     private let completionGlowController = CompletionGlowController()
+    private let statusItemController = StatusItemController()
+    private lazy var model = AbarOverlayModel(
+        onCompletionPulse: { [weak self] in
+            self?.showCompletionGlow()
+            self?.statusItemController.showCompletionPulse()
+        },
+        onTaskJump: { [weak self] in
+            self?.collapse(animated: true)
+        },
+        onStateChanged: { [weak self] state in
+            self?.statusItemController.update(state: state)
+        }
+    )
     private var collapseWorkItem: DispatchWorkItem?
+    private var statusItemStarted = false
 
     func show() {
+        startStatusItemIfNeeded()
         model.start()
         let panel = self.panel ?? makePanel()
         self.panel = panel
@@ -25,6 +37,19 @@ final class OverlayPanelController {
 
     func refresh() {
         model.refresh()
+    }
+
+    func toggle() {
+        let panel = self.panel ?? makePanel()
+        self.panel = panel
+        panel.ignoresMouseEvents = false
+        panel.acceptsMouseMovedEvents = true
+        panel.orderFrontRegardless()
+        if model.isExpanded {
+            collapse(animated: true)
+        } else {
+            expand()
+        }
     }
 
     private func makePanel() -> AbarOverlayPanel {
@@ -98,6 +123,19 @@ final class OverlayPanelController {
 
     private func showCompletionGlow() {
         completionGlowController.show(on: targetScreen())
+    }
+
+    private func startStatusItemIfNeeded() {
+        guard !statusItemStarted else { return }
+        statusItemStarted = true
+        statusItemController.start(
+            onToggle: { [weak self] in
+                self?.toggle()
+            },
+            onQuit: {
+                NSApplication.shared.terminate(nil)
+            }
+        )
     }
 
     private func panelFrame(on screen: NSScreen) -> NSRect {
@@ -246,12 +284,30 @@ final class CompletionGlowController {
 }
 
 private struct CompletionGlowView: View {
+    @State private var pulse = false
+
     var body: some View {
-        RoundedRectangle(cornerRadius: 24, style: .continuous)
-            .stroke(Color(red: 0.10, green: 0.78, blue: 0.46).opacity(0.95), lineWidth: 2)
-            .shadow(color: Color(red: 0.10, green: 0.78, blue: 0.46).opacity(0.95), radius: 16)
-            .shadow(color: Color(red: 0.10, green: 0.78, blue: 0.46).opacity(0.45), radius: 28)
-            .padding(6)
-            .background(Color.clear)
+        let green = Color(red: 0.02, green: 0.95, blue: 0.46)
+        ZStack {
+            RoundedRectangle(cornerRadius: 38, style: .continuous)
+                .stroke(green.opacity(pulse ? 0.26 : 0.16), lineWidth: 18)
+                .blur(radius: 10)
+                .scaleEffect(pulse ? 1.07 : 0.96)
+
+            RoundedRectangle(cornerRadius: 34, style: .continuous)
+                .stroke(green.opacity(pulse ? 0.72 : 0.42), lineWidth: 7)
+                .shadow(color: green.opacity(0.95), radius: pulse ? 26 : 18)
+
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .stroke(green.opacity(0.95), lineWidth: 2.5)
+                .padding(12)
+        }
+        .padding(8)
+        .background(Color.clear)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.72).repeatForever(autoreverses: true)) {
+                pulse = true
+            }
+        }
     }
 }

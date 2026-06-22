@@ -16,8 +16,8 @@ public struct OverlayGeometry {
     public static let preferredWidth: CGFloat = 500
     public static let preferredHeight: CGFloat = 228
     public static let collapsedWidth: CGFloat = 180
-    public static let completionGlowWidth: CGFloat = 180
-    public static let completionGlowHeight: CGFloat = 48
+    public static let completionGlowWidth: CGFloat = 300
+    public static let completionGlowHeight: CGFloat = 78
     public static let horizontalMargin: CGFloat = 16
 
     public static func panelFrame(on screen: OverlayScreenSnapshot) -> CGRect {
