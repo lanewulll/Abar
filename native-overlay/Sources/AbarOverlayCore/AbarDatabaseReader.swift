@@ -8,6 +8,9 @@ public enum AbarDatabaseReaderError: Error, Equatable {
 }
 
 public final class AbarDatabaseReader {
+    private static let completedTaskRetention: TimeInterval = 180
+    private static let runningTaskInactivityRetention: TimeInterval = 900
+
     private let databasePath: String
     private let now: () -> Date
 
@@ -29,12 +32,14 @@ public final class AbarDatabaseReader {
 
         let quota = try latestQuota(db: db)
         let events = try recentEvents(db: db, limit: 6)
+        let tasks = try taskSummaries(db: db, limit: 100)
         return AbarSnapshot(
             fiveHour: quota.fiveHour,
             weekly: quota.weekly,
             skillsCount: try count(db: db, table: "skills"),
             eventsCount: try count(db: db, table: "events"),
             recentEvents: events,
+            tasks: tasks,
             projectPath: try configValue(db: db, key: "project_path"),
             loadedAt: now()
         )
@@ -73,9 +78,16 @@ public final class AbarDatabaseReader {
         }
 
         let label = (window["label"] as? String) ?? fallbackLabel
-        let percent = normalizedPercent(window["usedPercent"])
+        let usedPercent = normalizedPercent(window["usedPercent"])
+        let remainingPercent = normalizedPercent(window["remainingPercent"])
+            ?? usedPercent.map { max(0, min(100, 100 - $0)) }
         let resetsAt = (window["resetsAt"] as? String).flatMap(Self.parseISODate)
-        return QuotaWindowSummary(name: label, usedPercent: percent, resetsAt: resetsAt)
+        return QuotaWindowSummary(
+            name: label,
+            usedPercent: usedPercent,
+            remainingPercent: remainingPercent,
+            resetsAt: resetsAt
+        )
     }
 
     private func normalizedPercent(_ value: Any?) -> Int? {
@@ -128,6 +140,142 @@ public final class AbarDatabaseReader {
             throw AbarDatabaseReaderError.stepFailed(String(cString: sqlite3_errmsg(db)))
         }
         return events
+    }
+
+    private func taskSummaries(db: OpaquePointer, limit: Int) throws -> [AbarTaskSummary] {
+        let rows = try taskEventRows(db: db, limit: limit)
+        let activityByTaskID = Dictionary(
+            rows.compactMap { row -> (String, Date)? in
+                guard let taskID = taskID(for: row) else { return nil }
+                return (taskID, row.createdAt)
+            },
+            uniquingKeysWith: max
+        )
+        let prompts = rows.compactMap { row -> TaskPrompt? in
+            guard row.eventType == "UserPromptSubmit" else { return nil }
+            let payload = parsePayload(row.payloadJSON)
+            let sessionId = payloadString(payload, "session_id") ?? row.sessionId ?? "unknown-session"
+            let turnId = payloadString(payload, "turn_id") ?? row.id
+            let projectPath = payloadString(payload, "cwd") ?? row.projectPath
+            let prompt = payloadString(payload, "prompt") ?? "Codex task"
+            return TaskPrompt(
+                id: "\(sessionId):\(turnId)",
+                sessionId: sessionId,
+                turnId: turnId,
+                projectPath: projectPath,
+                promptPreview: Self.promptPreview(prompt),
+                transcriptPath: payloadString(payload, "transcript_path"),
+                startedAt: row.createdAt
+            )
+        }
+        let stops = rows.compactMap { row -> TaskStop? in
+            guard row.eventType == "Stop" else { return nil }
+            let payload = parsePayload(row.payloadJSON)
+            let sessionId = payloadString(payload, "session_id") ?? row.sessionId
+            let turnId = payloadString(payload, "turn_id")
+            guard let sessionId, let turnId else { return nil }
+            return TaskStop(
+                id: "\(sessionId):\(turnId)",
+                completedAt: row.createdAt
+            )
+        }
+        let stopByTaskID = Dictionary(stops.map { ($0.id, $0.completedAt) }, uniquingKeysWith: max)
+        let promptsByProject = Dictionary(grouping: prompts) { prompt in
+            prompt.projectPath ?? prompt.projectName
+        }
+        let currentDate = now()
+
+        var tasks: [AbarTaskSummary] = []
+        for prompt in prompts {
+            let completedAt = stopByTaskID[prompt.id]
+            if let completedAt {
+                guard currentDate.timeIntervalSince(completedAt) <= Self.completedTaskRetention else {
+                    continue
+                }
+                let newerPromptExists = promptsByProject[prompt.projectPath ?? prompt.projectName]?.contains {
+                    $0.startedAt > completedAt
+                } ?? false
+                if newerPromptExists {
+                    continue
+                }
+            }
+            let lastActivityAt = completedAt ?? activityByTaskID[prompt.id] ?? prompt.startedAt
+            if completedAt == nil,
+               currentDate.timeIntervalSince(lastActivityAt) > Self.runningTaskInactivityRetention {
+                continue
+            }
+            let durationSeconds = max(0, Int(lastActivityAt.timeIntervalSince(prompt.startedAt)))
+
+            tasks.append(
+                AbarTaskSummary(
+                    id: prompt.id,
+                    projectName: prompt.projectName,
+                    promptPreview: prompt.promptPreview,
+                    startedAt: prompt.startedAt,
+                    lastActivityAt: lastActivityAt,
+                    durationSeconds: durationSeconds,
+                    completedAt: completedAt,
+                    transcriptPath: prompt.transcriptPath,
+                    sessionId: prompt.sessionId,
+                    turnId: prompt.turnId,
+                    state: completedAt == nil ? .running : .completed
+                )
+            )
+        }
+
+        return tasks.sorted { lhs, rhs in
+            if lhs.state != rhs.state {
+                return lhs.state == .running
+            }
+            let lhsDate = lhs.completedAt ?? lhs.startedAt
+            let rhsDate = rhs.completedAt ?? rhs.startedAt
+            return lhsDate > rhsDate
+        }
+    }
+
+    private func taskEventRows(db: OpaquePointer, limit: Int) throws -> [TaskEventRow] {
+        var statement: OpaquePointer?
+        let sql = """
+            SELECT id, event_type, project_path, session_id, payload_json, created_at
+            FROM events
+            WHERE payload_json IS NOT NULL
+            ORDER BY created_at DESC
+            LIMIT ?
+            """
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else {
+            throw AbarDatabaseReaderError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(statement) }
+
+        sqlite3_bind_int(statement, 1, Int32(limit))
+
+        var rows: [TaskEventRow] = []
+        var stepStatus = sqlite3_step(statement)
+        while stepStatus == SQLITE_ROW {
+            guard let id = columnText(statement, 0),
+                  let eventType = columnText(statement, 1),
+                  let createdAt = columnText(statement, 5).flatMap(Self.parseISODate)
+            else {
+                stepStatus = sqlite3_step(statement)
+                continue
+            }
+            rows.append(
+                TaskEventRow(
+                    id: id,
+                    eventType: eventType,
+                    projectPath: columnText(statement, 2),
+                    sessionId: columnText(statement, 3),
+                    payloadJSON: columnText(statement, 4),
+                    createdAt: createdAt
+                )
+            )
+            stepStatus = sqlite3_step(statement)
+        }
+
+        guard stepStatus == SQLITE_DONE else {
+            throw AbarDatabaseReaderError.stepFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        return rows
     }
 
     private func count(db: OpaquePointer, table: String) throws -> Int {
@@ -186,6 +334,39 @@ public final class AbarDatabaseReader {
         return String(cString: pointer)
     }
 
+    private func parsePayload(_ json: String?) -> [String: Any] {
+        guard let json,
+              let data = json.data(using: .utf8),
+              let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return [:]
+        }
+        return payload
+    }
+
+    private func payloadString(_ payload: [String: Any], _ key: String) -> String? {
+        if let string = payload[key] as? String, !string.isEmpty {
+            return string
+        }
+        return nil
+    }
+
+    private func taskID(for row: TaskEventRow) -> String? {
+        let payload = parsePayload(row.payloadJSON)
+        let sessionId = payloadString(payload, "session_id") ?? row.sessionId
+        let turnId = payloadString(payload, "turn_id")
+        guard let sessionId, let turnId else { return nil }
+        return "\(sessionId):\(turnId)"
+    }
+
+    private static func promptPreview(_ prompt: String) -> String {
+        let compact = prompt.filter { !$0.isWhitespace && !$0.isNewline }
+        guard compact.count > 5 else {
+            return compact.isEmpty ? "Codex" : String(compact)
+        }
+        return String(compact.prefix(5)) + "..."
+    }
+
     private static func parseISODate(_ value: String) -> Date? {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -196,6 +377,36 @@ public final class AbarDatabaseReader {
         formatter.formatOptions = [.withInternetDateTime]
         return formatter.date(from: value)
     }
+}
+
+private struct TaskEventRow {
+    var id: String
+    var eventType: String
+    var projectPath: String?
+    var sessionId: String?
+    var payloadJSON: String?
+    var createdAt: Date
+}
+
+private struct TaskPrompt {
+    var id: String
+    var sessionId: String
+    var turnId: String
+    var projectPath: String?
+    var promptPreview: String
+    var transcriptPath: String?
+    var startedAt: Date
+
+    var projectName: String {
+        guard let projectPath else { return "Codex" }
+        let name = URL(fileURLWithPath: projectPath).lastPathComponent
+        return name.isEmpty ? "Codex" : name
+    }
+}
+
+private struct TaskStop {
+    var id: String
+    var completedAt: Date
 }
 
 private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)

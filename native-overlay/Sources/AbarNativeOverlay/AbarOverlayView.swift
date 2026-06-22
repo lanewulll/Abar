@@ -1,3 +1,4 @@
+import AbarOverlayCore
 import SwiftUI
 
 struct AbarOverlayView: View {
@@ -17,12 +18,29 @@ struct AbarOverlayView: View {
     }
 
     private var expandedContent: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                statusDot(size: 11)
-                Text("Abar Native Overlay")
-                    .font(.system(size: 17, weight: .semibold))
-                Spacer()
+        ZStack(alignment: .topTrailing) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Spacer()
+                }
+                .frame(height: 22)
+
+                HStack(spacing: 10) {
+                    MetricPill(title: "5h", value: percentText(model.snapshot.fiveHour.remainingPercent))
+                    MetricPill(title: "Weekly", value: percentText(model.snapshot.weekly.remainingPercent))
+                    MetricPill(title: "Skills", value: "\(model.snapshot.skillsCount)")
+                    MetricPill(title: "Events", value: "\(model.snapshot.eventsCount)")
+                }
+
+                TaskList(tasks: model.displayedTasks) {
+                    model.activateCodex()
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 10)
+            .padding(.bottom, 14)
+
+            HStack(spacing: 8) {
                 Button("Refresh") {
                     model.refresh()
                 }
@@ -34,73 +52,36 @@ struct AbarOverlayView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
             }
-
-            HStack(spacing: 10) {
-                MetricPill(title: "5h", value: percentText(model.snapshot.fiveHour.usedPercent))
-                MetricPill(title: "Weekly", value: percentText(model.snapshot.weekly.usedPercent))
-                MetricPill(title: "Skills", value: "\(model.snapshot.skillsCount)")
-                MetricPill(title: "Events", value: "\(model.snapshot.eventsCount)")
-            }
-
-            Text(statusText)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
+            .padding(.top, 10)
+            .padding(.trailing, 18)
         }
-        .padding(18)
-        .frame(width: 500, height: 172)
+        .frame(width: OverlayGeometry.preferredWidth, height: OverlayGeometry.preferredHeight)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.white.opacity(0.28), lineWidth: 1)
+                .stroke(borderColor.opacity(0.86), lineWidth: 1.4)
         )
-        .shadow(color: .black.opacity(0.18), radius: 28, x: 0, y: 14)
+        .shadow(color: borderColor.opacity(0.22), radius: 20, x: 0, y: 8)
+        .shadow(color: .black.opacity(0.16), radius: 28, x: 0, y: 14)
     }
 
     private var collapsedContent: some View {
-        ZStack {
-            Capsule(style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    Capsule(style: .continuous)
-                        .stroke(Color.white.opacity(0.28), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.14), radius: 12, x: 0, y: 4)
-            statusDot(size: 10)
-        }
-        .frame(width: 72, height: 28)
+        Color.clear
+            .contentShape(Rectangle())
+            .frame(width: OverlayGeometry.collapsedWidth, height: 28)
     }
 
-    private func statusDot(size: CGFloat) -> some View {
-        Circle()
-            .fill(Color(red: 0.10, green: 0.62, blue: 0.50))
-            .frame(width: size, height: size)
-            .shadow(color: Color(red: 0.10, green: 0.62, blue: 0.50).opacity(0.35), radius: 6)
-    }
-
-    private var statusText: String {
-        if let error = model.errorMessage {
-            return error
+    private var borderColor: Color {
+        switch model.displayedActivityState {
+        case .idle:
+            return Color(red: 0.59, green: 0.88, blue: 0.68)
+        case .working:
+            return Color(red: 0.96, green: 0.79, blue: 0.36)
         }
-
-        let latest = model.snapshot.recentEvents.first
-        let latestLabel = latest.map { event in
-            [event.eventType, event.toolName, event.status]
-                .compactMap { $0 }
-                .joined(separator: " · ")
-        } ?? "No recent activity"
-        let project = model.snapshot.projectPath.map(compactPath) ?? "No project"
-        return "\(project) · \(latestLabel)"
     }
 
     private func percentText(_ value: Int?) -> String {
         value.map { "\($0)%" } ?? "n/a"
-    }
-
-    private func compactPath(_ value: String) -> String {
-        let parts = value.split(separator: "/")
-        guard parts.count > 2 else { return value }
-        return ".../" + parts.suffix(2).joined(separator: "/")
     }
 }
 
@@ -114,11 +95,111 @@ private struct MetricPill: View {
                 .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(.secondary)
             Text(value)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 15, weight: .semibold))
+                .monospacedDigit()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        .padding(.vertical, 8)
         .background(Color.white.opacity(0.36), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+private struct TaskList: View {
+    let tasks: [AbarTaskSummary]
+    let onJump: () -> Void
+
+    var body: some View {
+        VStack(spacing: 6) {
+            if tasks.isEmpty {
+                EmptyTaskRow()
+            } else {
+                ForEach(tasks.prefix(4)) { task in
+                    TaskRow(task: task, onJump: onJump)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+}
+
+private struct EmptyTaskRow: View {
+    var body: some View {
+        HStack {
+            Text("Idle")
+                .font(.system(size: 13, weight: .semibold))
+            Spacer()
+            Text("No active task")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 28)
+        .background(Color.white.opacity(0.24), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+    }
+}
+
+private struct TaskRow: View {
+    let task: AbarTaskSummary
+    let onJump: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(task.projectName)
+                .font(.system(size: 13, weight: .semibold))
+                .lineLimit(1)
+                .frame(width: 116, alignment: .leading)
+            Text(task.promptPreview)
+                .font(.system(size: 13, weight: .medium))
+                .lineLimit(1)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+            trailingControl
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 28)
+        .background(rowBackground, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var trailingControl: some View {
+        switch task.state {
+        case .running:
+            Text(elapsedText)
+                .font(.system(size: 12, weight: .semibold))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+        case .completed:
+            Button(action: onJump) {
+                Image(systemName: "arrow.up.forward.square")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .buttonStyle(.borderless)
+            .controlSize(.small)
+            .accessibilityLabel("Open Codex")
+        }
+    }
+
+    private var rowBackground: Color {
+        switch task.state {
+        case .running:
+            return Color(red: 1.00, green: 0.92, blue: 0.65).opacity(0.32)
+        case .completed:
+            return Color(red: 0.67, green: 0.92, blue: 0.73).opacity(0.34)
+        }
+    }
+
+    private var elapsedText: String {
+        let seconds = max(0, task.durationSeconds)
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
+        let remainingSeconds = seconds % 60
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        }
+        if minutes > 0 {
+            return "\(minutes)m \(remainingSeconds)s"
+        }
+        return "\(remainingSeconds)s"
     }
 }

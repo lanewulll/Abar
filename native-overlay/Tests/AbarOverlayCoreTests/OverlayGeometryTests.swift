@@ -11,7 +11,7 @@ final class OverlayGeometryTests: XCTestCase {
 
         XCTAssertEqual(
             OverlayGeometry.panelFrame(on: screen),
-            CGRect(x: 506, y: 810, width: 500, height: 172)
+            CGRect(x: 506, y: 754, width: 500, height: 228)
         )
     }
 
@@ -24,7 +24,7 @@ final class OverlayGeometryTests: XCTestCase {
 
         XCTAssertEqual(
             OverlayGeometry.panelFrame(on: screen),
-            CGRect(x: 16, y: 468, width: 288, height: 172)
+            CGRect(x: 16, y: 412, width: 288, height: 228)
         )
     }
 
@@ -57,7 +57,20 @@ final class OverlayGeometryTests: XCTestCase {
 
         XCTAssertEqual(
             OverlayGeometry.collapsedPanelFrame(on: screen),
-            CGRect(x: 720, y: 945, width: 72, height: 37)
+            CGRect(x: 666, y: 945, width: 180, height: 37)
+        )
+    }
+
+    func testCompletionGlowFrameWrapsNotchArea() {
+        let screen = OverlayScreenSnapshot(
+            frame: CGRect(x: 0, y: 0, width: 1512, height: 982),
+            visibleFrame: CGRect(x: 0, y: 33, width: 1512, height: 868),
+            safeAreaTop: 37
+        )
+
+        XCTAssertEqual(
+            OverlayGeometry.completionGlowFrame(on: screen),
+            CGRect(x: 666, y: 934, width: 180, height: 48)
         )
     }
 }

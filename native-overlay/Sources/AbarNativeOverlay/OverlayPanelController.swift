@@ -5,7 +5,10 @@ import SwiftUI
 @MainActor
 final class OverlayPanelController {
     private var panel: AbarOverlayPanel?
-    private let model = AbarOverlayModel()
+    private lazy var model = AbarOverlayModel { [weak self] in
+        self?.showCompletionGlow()
+    }
+    private let completionGlowController = CompletionGlowController()
     private var collapseWorkItem: DispatchWorkItem?
 
     func show() {
@@ -93,6 +96,10 @@ final class OverlayPanelController {
         }
     }
 
+    private func showCompletionGlow() {
+        completionGlowController.show(on: targetScreen())
+    }
+
     private func panelFrame(on screen: NSScreen) -> NSRect {
         let snapshot = OverlayScreenSnapshot(
             frame: screen.frame,
@@ -175,5 +182,76 @@ final class HoverTrackingHostingView<Content: View>: NSHostingView<Content> {
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
         layer?.isOpaque = false
+    }
+}
+
+@MainActor
+final class CompletionGlowController {
+    private var panel: NSPanel?
+    private var hideWorkItem: DispatchWorkItem?
+
+    func show(on screen: NSScreen) {
+        hideWorkItem?.cancel()
+        let panel = self.panel ?? makePanel(on: screen)
+        self.panel = panel
+        panel.setFrame(glowFrame(on: screen), display: true)
+        panel.alphaValue = 1
+        panel.orderFrontRegardless()
+
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.hide()
+        }
+        hideWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: workItem)
+    }
+
+    private func hide() {
+        guard let panel else { return }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.25
+            panel.animator().alphaValue = 0
+        } completionHandler: {
+            Task { @MainActor in
+                panel.orderOut(nil)
+            }
+        }
+    }
+
+    private func makePanel(on screen: NSScreen) -> NSPanel {
+        let panel = NSPanel(
+            contentRect: glowFrame(on: screen),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.level = .mainMenu + 4
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        panel.hasShadow = false
+        panel.hidesOnDeactivate = false
+        panel.ignoresMouseEvents = true
+        panel.contentView = NSHostingView(rootView: CompletionGlowView())
+        return panel
+    }
+
+    private func glowFrame(on screen: NSScreen) -> NSRect {
+        let snapshot = OverlayScreenSnapshot(
+            frame: screen.frame,
+            visibleFrame: screen.visibleFrame,
+            safeAreaTop: screen.safeAreaInsets.top
+        )
+        return OverlayGeometry.completionGlowFrame(on: snapshot)
+    }
+}
+
+private struct CompletionGlowView: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .stroke(Color(red: 0.10, green: 0.78, blue: 0.46).opacity(0.95), lineWidth: 2)
+            .shadow(color: Color(red: 0.10, green: 0.78, blue: 0.46).opacity(0.95), radius: 16)
+            .shadow(color: Color(red: 0.10, green: 0.78, blue: 0.46).opacity(0.45), radius: 28)
+            .padding(6)
+            .background(Color.clear)
     }
 }

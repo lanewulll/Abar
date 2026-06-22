@@ -78,7 +78,7 @@ final class AbarEventStoreTests: XCTestCase {
                 source: "internal_web_api",
                 confidence: "high",
                 snapshotJSON: """
-                {"provider":"codex","source":"internal_web_api","confidence":"high","windows":[{"name":"5h","usedPercent":11},{"name":"weekly","usedPercent":22}],"updatedAt":"2026-06-22T01:00:00.000Z"}
+                {"provider":"codex","source":"internal_web_api","confidence":"high","windows":[{"name":"5h","usedPercent":11,"remainingPercent":89},{"name":"weekly","usedPercent":22}],"updatedAt":"2026-06-22T01:00:00.000Z"}
                 """,
                 error: nil
             )
@@ -88,6 +88,8 @@ final class AbarEventStoreTests: XCTestCase {
 
         XCTAssertEqual(snapshot.skillsCount, 1)
         XCTAssertEqual(snapshot.fiveHour.usedPercent, 11)
+        XCTAssertEqual(snapshot.fiveHour.remainingPercent, 89)
         XCTAssertEqual(snapshot.weekly.usedPercent, 22)
+        XCTAssertEqual(snapshot.weekly.remainingPercent, 78)
     }
 }
