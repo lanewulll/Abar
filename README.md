@@ -1,14 +1,13 @@
 # Abar
 
-Abar is a Codex-only macOS menu bar monitor. It lives in the menu bar and opens a compact popover for Codex quota, configured project path, available skills, and recent hook activity.
+Abar is a Codex-only native macOS overlay monitor. It lives at the top of the screen, expands on hover, and shows Codex quota, available skills, and recent hook activity.
 
 ## What v1 Does
 
-- Electron Tray entry with a compact React popover
-- Menu-bar-only app behavior on macOS
-- Local SQLite cache in Electron `userData`
+- Native Swift/AppKit overlay with a hover-to-expand `NSPanel`
+- Local SQLite cache in `~/Library/Application Support/abar/abar.sqlite`
 - Skill scanning for project `.agents/skills`, user `~/.agents/skills`, and compatible `~/.codex/skills` locations
-- Optional quota refresh from Codex local auth state and ChatGPT's internal `wham/usage` endpoint
+- Quota refresh every 30 seconds from Codex local auth state and ChatGPT's internal `wham/usage` endpoint
 - Local hook event receiver on `127.0.0.1:3987`
 - Non-blocking Codex hook reporter
 
@@ -23,24 +22,11 @@ Abar is a Codex-only macOS menu bar monitor. It lives in the menu bar and opens 
 ## Development
 
 ```bash
-npm install
 npm test
 npm run dev
 ```
 
-`npm run dev` builds the app, packages the local macOS `.app`, and opens the real menu bar app. Use this path for status bar testing because Electron's raw dev runner can report an invisible status item on macOS.
-
-For low-level Electron/Vite debugging only:
-
-```bash
-npm run dev:electron
-```
-
-If Electron download times out, retry with:
-
-```bash
-ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ npm install
-```
+`npm run dev` builds and opens the native macOS app from `native-overlay/`.
 
 ## Build
 
@@ -49,11 +35,17 @@ npm run build
 npm run package:mac
 ```
 
-The packaged app is not signed or notarized in v1.
+The local app is signed ad-hoc for development and is not notarized in v1.
 
 ## Codex Hooks
 
-Open the Abar menu bar popover and click **Copy install**. Paste that prompt into Codex so Codex can merge the Abar hooks into `~/.codex/hooks.json`.
+Generate the hook snippet:
+
+```bash
+node reporters/codex-hook-reporter/install.js
+```
+
+Merge the printed hooks into `~/.codex/hooks.json`.
 
 After Codex edits hooks:
 
@@ -73,15 +65,7 @@ https://chatgpt.com/backend-api/wham/usage
 
 The request uses `Authorization: Bearer <access_token>` and, when available, `ChatGPT-Account-ID`. Abar stores only sanitized quota snapshots and never logs access tokens, refresh tokens, cookies, or authorization headers.
 
-Run a local diagnostic without starting Electron:
-
-```bash
-npm run quota:diagnose
-```
-
-The diagnostic prints whether token/account ID fields exist, the HTTP status, and a sanitized quota summary. It does not print token contents.
-
-`wham/usage` is an undocumented internal ChatGPT endpoint, not a stable public API. If auth is missing, the token is rejected, the endpoint is rate limited, or the network/proxy path fails, Abar shows the reason and falls back to local Codex session estimates when available. The official usage view remains:
+`wham/usage` is an undocumented internal ChatGPT endpoint, not a stable public API. If auth is missing, the token is rejected, the endpoint is rate limited, or the network/proxy path fails, Abar shows the reason from the failed refresh. The official usage view remains:
 
 ```text
 https://chatgpt.com/codex/settings/usage

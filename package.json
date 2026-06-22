@@ -1,77 +1,16 @@
 {
   "name": "abar",
   "version": "0.1.0",
-  "description": "Codex-only macOS menu bar monitor for quota, skills, and local activity.",
+  "description": "Codex-only native macOS overlay monitor for quota, skills, and local activity.",
   "private": true,
   "type": "module",
-  "main": "dist-electron/main/main.js",
   "scripts": {
-    "dev": "node scripts/start-menubar.mjs",
-    "dev:electron": "npm run rebuild:electron && electron-vite dev",
-    "start:menubar": "node scripts/start-menubar.mjs",
-    "build": "tsc --noEmit && electron-vite build",
-    "preview": "electron-vite preview",
-    "test": "npm run rebuild:node && vitest run",
-    "test:watch": "vitest",
-    "quota:diagnose": "node scripts/diagnose-codex-quota.mjs",
-    "tray:smoke": "electron scripts/tray-smoke.mjs",
-    "rebuild:node": "npm rebuild better-sqlite3",
-    "rebuild:electron": "electron-rebuild -f -w better-sqlite3",
-    "package:mac": "npm run build && npm run rebuild:electron && electron-builder --mac --dir"
-  },
-  "dependencies": {
-    "@electron-toolkit/preload": "^3.0.2",
-    "@electron-toolkit/utils": "^4.0.0",
-    "better-sqlite3": "^12.4.1",
-    "lucide-react": "^0.468.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
-  },
-  "overrides": {
-    "esbuild": "0.28.1"
-  },
-  "devDependencies": {
-    "@electron/rebuild": "^4.0.4",
-    "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^22.10.2",
-    "@types/react": "^18.3.18",
-    "@types/react-dom": "^18.3.5",
-    "@vitejs/plugin-react": "^5.2.0",
-    "electron": "^42.4.1",
-    "electron-builder": "^26.15.3",
-    "electron-vite": "^5.0.0",
-    "typescript": "^5.7.2",
-    "vite": "^7.3.5",
-    "vitest": "^4.1.9"
-  },
-  "build": {
-    "appId": "dev.abar.monitor",
-    "productName": "Abar",
-    "asarUnpack": [
-      "**/*.node",
-      "reporters/**"
-    ],
-    "extraResources": [
-      {
-        "from": "electron/assets",
-        "to": "."
-      }
-    ],
-    "files": [
-      "dist/**",
-      "dist-electron/**",
-      "reporters/**",
-      "package.json"
-    ],
-    "mac": {
-      "category": "public.app-category.developer-tools",
-      "extendInfo": {
-        "LSUIElement": true
-      },
-      "target": [
-        "dmg",
-        "zip"
-      ]
-    }
+    "dev": "npm run start:native",
+    "start:native": "native-overlay/scripts/start.sh",
+    "build": "npm run build:native",
+    "build:native": "cd native-overlay && swift build -c release && scripts/build-app.sh",
+    "test": "npm run test:native",
+    "test:native": "cd native-overlay && swift test",
+    "package:mac": "npm run build:native"
   }
 }

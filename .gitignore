@@ -1,4 +1,6 @@
 node_modules/
+native-overlay/.build/
+native-overlay/dist/
 dist/
 dist-electron/
 release/

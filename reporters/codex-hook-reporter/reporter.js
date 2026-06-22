@@ -40,6 +40,11 @@ async function postEvent(raw) {
     return;
   }
 
+  payload = {
+    ...payload,
+    abar_connection: detectConnection(process.env)
+  };
+
   const body = JSON.stringify(payload);
   const request = http.request(
     {
@@ -68,6 +73,31 @@ async function postEvent(raw) {
     finish();
   });
   request.end(body);
+}
+
+function detectConnection(env) {
+  const baseUrl = firstNonEmpty(
+    env.OPENAI_BASE_URL,
+    env.OPENAI_API_BASE,
+    env.OPENAI_BASEURL,
+    env.CODEX_BASE_URL
+  );
+  const hasApiKey = Boolean(firstNonEmpty(env.OPENAI_API_KEY, env.CODEX_API_KEY));
+  if (hasApiKey || baseUrl) {
+    return {
+      mode: 'api',
+      ...(baseUrl ? { baseUrl } : { baseUrl: 'https://api.openai.com/v1' }),
+      hasApiKey
+    };
+  }
+  return {
+    mode: 'account',
+    hasApiKey: false
+  };
+}
+
+function firstNonEmpty(...values) {
+  return values.find((value) => typeof value === 'string' && value.trim())?.trim();
 }
 
 function finish() {
