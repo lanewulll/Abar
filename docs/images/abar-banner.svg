@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="260" viewBox="0 0 1200 260" role="img" aria-labelledby="title desc">
+  <title id="title">ABAR</title>
+  <desc id="desc">Abar neon technology banner with layered lettering and activity indicators.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#101416"/>
+      <stop offset="0.55" stop-color="#090c0d"/>
+      <stop offset="1" stop-color="#121718"/>
+    </linearGradient>
+    <linearGradient id="letterFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f3f7f5"/>
+      <stop offset="0.48" stop-color="#dfe8e4"/>
+      <stop offset="0.49" stop-color="#74f5ad"/>
+      <stop offset="1" stop-color="#2bc879"/>
+    </linearGradient>
+    <linearGradient id="rule" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1f2a27" stop-opacity="0"/>
+      <stop offset="0.18" stop-color="#38e58c"/>
+      <stop offset="0.76" stop-color="#38e58c"/>
+      <stop offset="1" stop-color="#1f2a27" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="greenGlow" x="-20%" y="-40%" width="140%" height="180%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feFlood flood-color="#37e58c" flood-opacity="0.5"/>
+      <feComposite in2="blur" operator="in"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="coralGlow" x="-300%" y="-300%" width="700%" height="700%">
+      <feGaussianBlur stdDeviation="7" result="blur"/>
+      <feFlood flood-color="#ff765f" flood-opacity="0.7"/>
+      <feComposite in2="blur" operator="in"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M 32 0 L 0 0 0 32" fill="none" stroke="#b7c8c0" stroke-opacity="0.035" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="260" rx="6" fill="url(#background)"/>
+  <rect x="1" y="1" width="1198" height="258" rx="5" fill="none" stroke="#26312e"/>
+  <rect width="1200" height="260" rx="6" fill="url(#grid)"/>
+
+  <path d="M82 48H1118" stroke="url(#rule)" stroke-width="2"/>
+  <path d="M82 211H1118" stroke="url(#rule)" stroke-width="2"/>
+
+  <g font-family="'SFMono-Regular', 'SF Mono', Menlo, Monaco, Consolas, monospace"
+     font-size="176" font-weight="900" letter-spacing="24">
+    <text x="113" y="186" fill="none" stroke="#ff765f" stroke-opacity="0.7" stroke-width="3">ABAR</text>
+    <text x="105" y="178" fill="none" stroke="#37e58c" stroke-opacity="0.88" stroke-width="4" filter="url(#greenGlow)">ABAR</text>
+    <text x="97" y="170" fill="url(#letterFill)" stroke="#f2fff8" stroke-width="1.5">ABAR</text>
+  </g>
+
+  <g transform="translate(955 68)">
+    <path d="M0 0h132" stroke="#30423b" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="20" cy="0" r="6" fill="#37e58c" filter="url(#greenGlow)"/>
+    <circle cx="70" cy="0" r="6" fill="#37e58c" fill-opacity="0.55"/>
+    <circle cx="120" cy="0" r="7" fill="#ff765f" filter="url(#coralGlow)"/>
+  </g>
+
+  <g transform="translate(87 221)" font-family="'SFMono-Regular', 'SF Mono', Menlo, Monaco, Consolas, monospace">
+    <text fill="#71827a" font-size="12" letter-spacing="3">CODEX ACTIVITY · QUOTA · SKILLS</text>
+  </g>
+  <g transform="translate(1113 221)" font-family="'SFMono-Regular', 'SF Mono', Menlo, Monaco, Consolas, monospace" text-anchor="end">
+    <text fill="#ff8a75" font-size="12" font-weight="700" letter-spacing="2">NATIVE macOS</text>
+  </g>
+</svg>
