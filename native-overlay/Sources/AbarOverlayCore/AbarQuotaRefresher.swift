@@ -4,7 +4,7 @@ public enum AbarQuotaRefresher {
     public static let whamUsageURL = "https://chatgpt.com/backend-api/wham/usage"
 
     public static func refresh(
-        codexHome: String = (NSHomeDirectory() as NSString).appendingPathComponent(".codex"),
+        codexHome: String = AbarRuntimeConfiguration.codexHome(),
         timeoutSeconds: Int = 15
     ) -> AbarStoredQuotaSnapshot {
         let auth = readAuth(codexHome: codexHome)
@@ -46,8 +46,7 @@ public enum AbarQuotaRefresher {
             "source": "internal_web_api",
             "confidence": windows.isEmpty ? "low" : "high",
             "windows": windows,
-            "updatedAt": ISO8601DateFormatter().string(from: Date()),
-            "raw": sanitize(raw)
+            "updatedAt": ISO8601DateFormatter().string(from: Date())
         ]
         if windows.isEmpty {
             snapshot["error"] = "No usable Codex quota windows found in internal web API response."
@@ -237,20 +236,6 @@ public enum AbarQuotaRefresher {
         if seconds == 18_000 { return "5h" }
         if seconds == 604_800 { return "weekly" }
         return "unknown"
-    }
-
-    private static func sanitize(_ value: Any) -> Any {
-        if let dictionary = value as? [String: Any] {
-            var sanitized: [String: Any] = [:]
-            for (key, item) in dictionary {
-                sanitized[key] = key.lowercased().contains("token") ? "[redacted]" : sanitize(item)
-            }
-            return sanitized
-        }
-        if let array = value as? [Any] {
-            return array.map(sanitize)
-        }
-        return value
     }
 
     private static func jsonString(_ value: [String: Any]) -> String {

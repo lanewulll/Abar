@@ -15,7 +15,7 @@ public struct AbarCodexConnectionSummary: Equatable, Sendable {
         self.displayText = displayText
     }
 
-    public static let unknown = AbarCodexConnectionSummary(mode: .unknown, displayText: "Unknown source")
+    public static let unknown = AbarCodexConnectionSummary(mode: .unknown, displayText: "未检测到 Codex")
 }
 
 public enum AbarCodexConnectionResolver {
@@ -42,20 +42,20 @@ public enum AbarCodexConnectionResolver {
                 )
             }
             if mode == "account" {
-                return accountSummary(authJSON: authJSON)
+                return accountSummary()
             }
         }
 
         if authJSON != nil {
-            return accountSummary(authJSON: authJSON)
+            return accountSummary()
         }
         return .unknown
     }
 
-    private static func accountSummary(authJSON: String?) -> AbarCodexConnectionSummary {
+    private static func accountSummary() -> AbarCodexConnectionSummary {
         AbarCodexConnectionSummary(
             mode: .account,
-            displayText: email(from: authJSON) ?? "Codex account"
+            displayText: "Codex 账户"
         )
     }
 
@@ -66,36 +66,6 @@ public enum AbarCodexConnectionResolver {
             return nil
         }
         return payload["abar_connection"] as? [String: Any]
-    }
-
-    private static func email(from authJSON: String?) -> String? {
-        guard let authJSON,
-              let data = authJSON.data(using: .utf8),
-              let auth = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let tokens = auth["tokens"] as? [String: Any]
-        else {
-            return nil
-        }
-        return emailFromJWT(string(tokens["id_token"] ?? tokens["idToken"]))
-            ?? emailFromJWT(string(tokens["access_token"] ?? tokens["accessToken"]))
-    }
-
-    private static func emailFromJWT(_ token: String?) -> String? {
-        guard let token else { return nil }
-        let parts = token.split(separator: ".")
-        guard parts.count == 3 else { return nil }
-        var payload = String(parts[1])
-            .replacingOccurrences(of: "-", with: "+")
-            .replacingOccurrences(of: "_", with: "/")
-        while payload.count % 4 != 0 {
-            payload.append("=")
-        }
-        guard let data = Data(base64Encoded: payload),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else {
-            return nil
-        }
-        return string(json["email"])
     }
 
     private static func string(_ value: Any?) -> String? {

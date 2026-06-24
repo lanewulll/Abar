@@ -16,7 +16,7 @@ public final class AbarDatabaseReader {
 
     public init(
         databasePath: String,
-        codexHome: String = (NSHomeDirectory() as NSString).appendingPathComponent(".codex"),
+        codexHome: String = AbarRuntimeConfiguration.codexHome(),
         now: @escaping () -> Date = Date.init
     ) {
         self.databasePath = databasePath
@@ -56,11 +56,22 @@ public final class AbarDatabaseReader {
     }
 
     private func latestQuota(db: OpaquePointer) throws -> (fiveHour: QuotaWindowSummary, weekly: QuotaWindowSummary) {
-        guard let json = try firstText(
+        let successfulJSON = try firstText(
             db: db,
-            sql: "SELECT snapshot_json FROM quota_snapshots ORDER BY created_at DESC LIMIT 1",
+            sql: "SELECT snapshot_json FROM quota_snapshots WHERE error IS NULL OR error = '' ORDER BY created_at DESC LIMIT 1",
             bindings: []
-        ) else {
+        )
+        let json: String?
+        if let successfulJSON {
+            json = successfulJSON
+        } else {
+            json = try firstText(
+                db: db,
+                sql: "SELECT snapshot_json FROM quota_snapshots ORDER BY created_at DESC LIMIT 1",
+                bindings: []
+            )
+        }
+        guard let json else {
             return (.unavailable(name: "5h"), .unavailable(name: "Weekly"))
         }
 
@@ -168,15 +179,17 @@ public final class AbarDatabaseReader {
             let sessionId = payloadString(payload, "session_id") ?? row.sessionId ?? "unknown-session"
             let turnId = payloadString(payload, "turn_id") ?? row.id
             let projectPath = payloadString(payload, "cwd") ?? row.projectPath
-            let prompt = payloadString(payload, "prompt") ?? "Codex task"
-            guard !Self.isInternalTaskPrompt(prompt) else { return nil }
+            let rawPrompt = payloadString(payload, "prompt")
+            let storedPreview = payloadString(payload, "prompt_preview")
+            let prompt = rawPrompt ?? storedPreview ?? "Codex task"
+            guard rawPrompt == nil || !Self.isInternalTaskPrompt(prompt) else { return nil }
             return TaskPrompt(
                 id: "\(sessionId):\(turnId)",
                 sessionId: sessionId,
                 turnId: turnId,
                 projectPath: projectPath,
-                promptPreview: Self.promptPreview(prompt),
-                transcriptPath: payloadString(payload, "transcript_path"),
+                promptPreview: storedPreview ?? Self.promptPreview(prompt),
+                transcriptPath: nil,
                 startedAt: row.createdAt
             )
         }

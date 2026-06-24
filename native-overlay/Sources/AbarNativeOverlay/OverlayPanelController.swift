@@ -6,6 +6,9 @@ import SwiftUI
 final class OverlayPanelController {
     private var panel: AbarOverlayPanel?
     private let statusItemController = StatusItemController()
+    private lazy var statusCenterController = StatusCenterWindowController(onRefreshOverlay: { [weak self] in
+        self?.refresh()
+    })
     private lazy var model = AbarOverlayModel(
         onCompletionPulse: { [weak self] in
             self?.statusItemController.showCompletionPulse()
@@ -35,6 +38,10 @@ final class OverlayPanelController {
 
     func refresh() {
         model.refresh()
+    }
+
+    func showStatusCenter() {
+        statusCenterController.show()
     }
 
     func toggle() {
@@ -129,6 +136,9 @@ final class OverlayPanelController {
         statusItemController.start(
             onToggle: { [weak self] in
                 self?.toggle()
+            },
+            onOpenStatusCenter: { [weak self] in
+                self?.statusCenterController.show()
             },
             onRefresh: { [weak self] in
                 self?.refresh()

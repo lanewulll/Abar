@@ -13,4 +13,30 @@ public enum AbarRuntimeConfiguration {
         }
         return port
     }
+
+    public static func codexHome(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        home: String = NSHomeDirectory()
+    ) -> String {
+        if let override = environment["CODEX_HOME"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !override.isEmpty {
+            return override
+        }
+        return (home as NSString).appendingPathComponent(".codex")
+    }
+
+    public static func nodeExecutable(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
+    ) -> String? {
+        let pathCandidates = (environment["PATH"] ?? "")
+            .split(separator: ":")
+            .map { String($0) + "/node" }
+        let candidates = pathCandidates + [
+            "/opt/homebrew/bin/node",
+            "/usr/local/bin/node",
+            "/usr/bin/node"
+        ]
+        return candidates.first(where: isExecutable)
+    }
 }

@@ -84,6 +84,38 @@ final class AbarDatabaseReaderTests: XCTestCase {
         XCTAssertEqual(snapshot.activityState, .idle)
     }
 
+    func testUsesLastSuccessfulQuotaWhenLatestRefreshFailed() throws {
+        let dbURL = temporaryDatabaseURL()
+        try withSQLiteDatabase(at: dbURL.path) { db in
+            createReaderSchema(db)
+            exec(db, """
+                INSERT INTO quota_snapshots (provider, source, confidence, snapshot_json, error, created_at)
+                VALUES (
+                  'codex',
+                  'internal_web_api',
+                  'high',
+                  '{"windows":[{"name":"5h","remainingPercent":73},{"name":"weekly","remainingPercent":61}]}',
+                  NULL,
+                  '2026-06-22T01:00:00.000Z'
+                );
+                INSERT INTO quota_snapshots (provider, source, confidence, snapshot_json, error, created_at)
+                VALUES (
+                  'codex',
+                  'internal_web_api',
+                  'low',
+                  '{"windows":[],"error":"HTTP 403"}',
+                  'HTTP 403',
+                  '2026-06-22T01:01:00.000Z'
+                );
+                """)
+        }
+
+        let snapshot = try AbarDatabaseReader(databasePath: dbURL.path).loadSnapshot()
+
+        XCTAssertEqual(snapshot.fiveHour.remainingPercent, 73)
+        XCTAssertEqual(snapshot.weekly.remainingPercent, 61)
+    }
+
     func testDerivesRunningTaskFromPromptEvent() throws {
         let dbURL = temporaryDatabaseURL()
         try withSQLiteDatabase(at: dbURL.path) { db in
@@ -114,7 +146,7 @@ final class AbarDatabaseReaderTests: XCTestCase {
         XCTAssertEqual(snapshot.tasks.first?.promptPreview, "修复菜单栏显示问题并验证")
         XCTAssertEqual(snapshot.tasks.first?.sessionId, "session-1")
         XCTAssertEqual(snapshot.tasks.first?.turnId, "turn-1")
-        XCTAssertEqual(snapshot.tasks.first?.transcriptPath, "/tmp/session-1.jsonl")
+        XCTAssertNil(snapshot.tasks.first?.transcriptPath)
         XCTAssertEqual(snapshot.tasks.first?.state, .running)
         XCTAssertEqual(snapshot.tasks.first?.startedAt, Self.date("2026-06-22T01:00:00.000Z"))
         XCTAssertEqual(snapshot.tasks.first?.lastActivityAt, Self.date("2026-06-22T01:00:00.000Z"))
@@ -150,7 +182,7 @@ final class AbarDatabaseReaderTests: XCTestCase {
         XCTAssertEqual(snapshot.codexConnection.displayText, "https://gateway.example.com/v1")
     }
 
-    func testSnapshotUsesEmailFromAuthWhenHookIsAccountMode() throws {
+    func testSnapshotDoesNotExposeEmailFromAuthWhenHookIsAccountMode() throws {
         let dbURL = temporaryDatabaseURL()
         let codexHome = temporaryDirectoryURL()
         try FileManager.default.createDirectory(at: codexHome, withIntermediateDirectories: true)
@@ -181,7 +213,7 @@ final class AbarDatabaseReaderTests: XCTestCase {
         let snapshot = try reader.loadSnapshot()
 
         XCTAssertEqual(snapshot.codexConnection.mode, .account)
-        XCTAssertEqual(snapshot.codexConnection.displayText, "user@example.com")
+        XCTAssertEqual(snapshot.codexConnection.displayText, "Codex 账户")
     }
 
     func testIgnoresInternalSuggestionPromptWhenDerivingTasks() throws {
