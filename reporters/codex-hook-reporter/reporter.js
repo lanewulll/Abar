@@ -4,10 +4,10 @@ import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { serverPort } from './runtime-config.js';
 
-const port = Number(process.env.ABAR_SERVER_PORT || 3987);
+const port = serverPort();
 const timeoutMs = Math.max(50, Number(process.env.ABAR_REPORTER_TIMEOUT_MS || 800));
-const eventSecret = process.env.ABAR_EVENT_SECRET || '';
 const debugEnabled = process.env.ABAR_REPORTER_DEBUG === '1';
 
 let stdin = '';
@@ -55,8 +55,7 @@ async function postEvent(raw) {
       timeout: timeoutMs,
       headers: {
         'content-type': 'application/json',
-        'content-length': Buffer.byteLength(body),
-        ...(eventSecret ? { 'x-abar-secret': eventSecret } : {})
+        'content-length': Buffer.byteLength(body)
       }
     },
     (response) => {

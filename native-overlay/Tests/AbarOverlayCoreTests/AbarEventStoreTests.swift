@@ -56,6 +56,43 @@ final class AbarEventStoreTests: XCTestCase {
         XCTAssertEqual(snapshot.recentEvents.first?.eventType, "PreToolUse")
     }
 
+    func testInsertEventPersistsLatestNonEmptyProjectPath() throws {
+        let dbURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("abar-native-store-\(UUID().uuidString)")
+            .appendingPathExtension("sqlite")
+        let store = AbarEventStore(databasePath: dbURL.path)
+        try store.initialize(defaultPort: 3987)
+
+        try store.insertEvent(
+            AbarStoredEvent(
+                id: "event-with-project",
+                eventType: "UserPromptSubmit",
+                projectPath: "/tmp/project-a",
+                sessionId: "session",
+                toolName: nil,
+                toolUseId: nil,
+                status: "unknown",
+                payloadJSON: "{}",
+                createdAt: "2026-06-22T01:00:00.000Z"
+            )
+        )
+        try store.insertEvent(
+            AbarStoredEvent(
+                id: "event-without-project",
+                eventType: "Stop",
+                projectPath: nil,
+                sessionId: "session",
+                toolName: nil,
+                toolUseId: nil,
+                status: "unknown",
+                payloadJSON: "{}",
+                createdAt: "2026-06-22T01:01:00.000Z"
+            )
+        )
+
+        XCTAssertEqual(try store.configValue(key: "project_path"), "/tmp/project-a")
+    }
+
     func testEventStorePersistsSkillsAndQuotaForReader() throws {
         let dbURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("abar-native-store-\(UUID().uuidString)")

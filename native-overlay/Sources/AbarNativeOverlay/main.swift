@@ -26,22 +26,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startLocalEventServer(controller: OverlayPanelController) {
+        let port = AbarRuntimeConfiguration.serverPort()
         let databasePath = AbarOverlayModel.defaultDatabasePath()
         let store = AbarEventStore(databasePath: databasePath)
         do {
-            try store.initialize(defaultPort: 3987)
+            try store.initialize(defaultPort: Int(port))
         } catch {
             NSLog("[AbarNativeOverlay] failed to initialize event store: %@", String(describing: error))
         }
 
-        let server = AbarLocalEventServer(port: 3987, store: store) {
+        let server = AbarLocalEventServer(port: port, store: store) {
             controller.refresh()
         }
         eventServer = server
         server.start()
 
-        let projectPath = (try? store.configValue(key: "project_path")) ?? FileManager.default.currentDirectoryPath
-        let maintenanceService = AbarMaintenanceService(store: store, projectPath: projectPath) {
+        let maintenanceService = AbarMaintenanceService(
+            store: store,
+            fallbackProjectPath: FileManager.default.currentDirectoryPath
+        ) {
             controller.refresh()
         }
         self.maintenanceService = maintenanceService
