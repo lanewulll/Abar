@@ -1,7 +1,7 @@
 {
   "name": "abar",
   "version": "0.1.0",
-  "description": "Codex-only native macOS overlay monitor for quota, skills, and local activity.",
+  "description": "Codex-only native macOS overlay monitor for quota and local activity.",
   "private": true,
   "license": "MIT",
   "repository": {
