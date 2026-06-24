@@ -7,6 +7,7 @@ APP_NAME="Abar"
 APP_DIR="$ROOT_DIR/dist/$APP_NAME.app"
 EXECUTABLE="$ROOT_DIR/.build/release/AbarNativeOverlay"
 VERSION="$(node -e 'console.log(require(process.argv[1]).version)' "$PROJECT_ROOT/package.json")"
+GIT_COMMIT="$(git -C "$PROJECT_ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
 ICON_PATH="$("$ROOT_DIR/scripts/generate-icon.sh")"
 
 cd "$ROOT_DIR"
@@ -15,8 +16,15 @@ swift build -c release >&2
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS"
 mkdir -p "$APP_DIR/Contents/Resources"
+mkdir -p "$APP_DIR/Contents/Resources/reporter"
+mkdir -p "$APP_DIR/Contents/Resources/maintenance/lib"
 cp "$EXECUTABLE" "$APP_DIR/Contents/MacOS/AbarNativeOverlay"
 cp "$ICON_PATH" "$APP_DIR/Contents/Resources/AppIcon.icns"
+cp "$PROJECT_ROOT/reporters/codex-hook-reporter/reporter.js" "$APP_DIR/Contents/Resources/reporter/reporter.js"
+cp "$PROJECT_ROOT/reporters/codex-hook-reporter/runtime-config.js" "$APP_DIR/Contents/Resources/reporter/runtime-config.js"
+cp "$PROJECT_ROOT/scripts/abar-maintenance.js" "$APP_DIR/Contents/Resources/maintenance/abar-maintenance.js"
+cp "$PROJECT_ROOT/scripts/lib/"*.js "$APP_DIR/Contents/Resources/maintenance/lib/"
+cp "$PROJECT_ROOT/package.json" "$APP_DIR/Contents/Resources/package.json"
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -36,6 +44,12 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
   <string>$VERSION</string>
   <key>CFBundleVersion</key>
   <string>$VERSION</string>
+  <key>AbarGitCommit</key>
+  <string>$GIT_COMMIT</string>
+  <key>AbarRepositoryURL</key>
+  <string>https://github.com/lanewulll/Abar</string>
+  <key>AbarSourcePath</key>
+  <string>$PROJECT_ROOT</string>
   <key>CFBundleIconFile</key>
   <string>AppIcon</string>
   <key>LSMinimumSystemVersion</key>

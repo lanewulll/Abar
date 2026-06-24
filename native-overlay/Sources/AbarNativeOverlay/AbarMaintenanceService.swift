@@ -43,6 +43,7 @@ final class AbarMaintenanceService {
             let snapshot = AbarQuotaRefresher.refresh()
             do {
                 try store.insertQuotaSnapshot(snapshot)
+                try store.pruneExpiredData()
             } catch {
                 NSLog("[AbarNativeOverlay] quota refresh failed to write snapshot: %@", String(describing: error))
             }

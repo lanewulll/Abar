@@ -14,6 +14,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlayController = controller
         startLocalEventServer(controller: controller)
         controller.show()
+        if ProcessInfo.processInfo.environment["ABAR_SHOW_STATUS_CENTER"] == "1" {
+            controller.showStatusCenter()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

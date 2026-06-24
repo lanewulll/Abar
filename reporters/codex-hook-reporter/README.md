@@ -12,11 +12,16 @@ Reporter 在 Abar 未运行、请求超时或输入无效时也会以状态码 `
 
 在仓库根目录执行：
 
+推荐使用仓库根目录的安全维护命令：
+
 ```bash
-node reporters/codex-hook-reporter/install.js
+npm run hooks:preview
+npm run hooks:install
 ```
 
-将输出的 `hooks` 合并到 `~/.codex/hooks.json`，随后在 Codex 中运行 `/hooks` 并手动信任。
+安装命令会备份、结构化合并并校验 `~/.codex/hooks.json`，不会覆盖用户已有 Hook。Reporter 随应用安装到稳定路径，不再依赖源码仓库位置。随后仍需在 Codex 中运行 `/hooks` 并由用户手动信任。
+
+`node reporters/codex-hook-reporter/install.js` 仍保留为只输出 JSON 的开发与人工配置回退方式。
 
 ## 环境变量
 

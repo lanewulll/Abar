@@ -26,7 +26,7 @@ final class AbarCodexConnectionResolverTests: XCTestCase {
         XCTAssertEqual(summary.displayText, AbarCodexConnectionResolver.defaultBaseURL)
     }
 
-    func testAccountConnectionUsesEmailFromAuthJWT() {
+    func testAccountConnectionDoesNotExposeEmailFromAuthJWT() {
         let token = Self.jwt(payload: #"{"email":"user@example.com","sub":"user-1"}"#)
         let authJSON = #"{"auth_mode":"chatgpt","tokens":{"id_token":"\#(token)"}}"#
 
@@ -38,7 +38,8 @@ final class AbarCodexConnectionResolverTests: XCTestCase {
         )
 
         XCTAssertEqual(summary.mode, .account)
-        XCTAssertEqual(summary.displayText, "user@example.com")
+        XCTAssertEqual(summary.displayText, "Codex 账户")
+        XCTAssertFalse(summary.displayText.contains("user@example.com"))
         XCTAssertFalse(summary.displayText.contains(token))
     }
 
@@ -51,7 +52,7 @@ final class AbarCodexConnectionResolverTests: XCTestCase {
         )
 
         XCTAssertEqual(summary.mode, .account)
-        XCTAssertEqual(summary.displayText, "Codex account")
+        XCTAssertEqual(summary.displayText, "Codex 账户")
     }
 
     private static func jwt(payload: String) -> String {

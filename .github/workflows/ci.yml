@@ -34,7 +34,7 @@ jobs:
         run: npm ci
 
       - name: Check environment
-        run: npm run check
+        run: ABAR_SKIP_CODEX_CHECK=1 npm run check
 
       - name: Test
         run: npm test
@@ -46,7 +46,10 @@ jobs:
         run: |
           test -f "native-overlay/dist/Abar.app/Contents/Info.plist"
           test -f "native-overlay/dist/Abar.app/Contents/Resources/AppIcon.icns"
+          test -f "native-overlay/dist/Abar.app/Contents/Resources/reporter/reporter.js"
+          test -f "native-overlay/dist/Abar.app/Contents/Resources/maintenance/abar-maintenance.js"
           file "native-overlay/dist/Abar.app/Contents/MacOS/AbarNativeOverlay" | grep -q "arm64"
           test "$(plutil -extract CFBundleName raw "native-overlay/dist/Abar.app/Contents/Info.plist")" = "Abar"
           test "$(plutil -extract LSMinimumSystemVersion raw "native-overlay/dist/Abar.app/Contents/Info.plist")" = "14.0"
+          test -n "$(plutil -extract AbarGitCommit raw "native-overlay/dist/Abar.app/Contents/Info.plist")"
           codesign --verify --deep --strict "native-overlay/dist/Abar.app"

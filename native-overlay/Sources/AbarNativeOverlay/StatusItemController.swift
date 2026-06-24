@@ -5,6 +5,7 @@ import AppKit
 final class StatusItemController: NSObject {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private var onToggle: (() -> Void)?
+    private var onOpenStatusCenter: (() -> Void)?
     private var onRefresh: (() -> Void)?
     private var onQuit: (() -> Void)?
     private var state: AbarStatusSignal = .idle
@@ -13,10 +14,12 @@ final class StatusItemController: NSObject {
 
     func start(
         onToggle: @escaping () -> Void,
+        onOpenStatusCenter: @escaping () -> Void,
         onRefresh: @escaping () -> Void,
         onQuit: @escaping () -> Void
     ) {
         self.onToggle = onToggle
+        self.onOpenStatusCenter = onOpenStatusCenter
         self.onRefresh = onRefresh
         self.onQuit = onQuit
         guard let button = item.button else { return }
@@ -47,10 +50,17 @@ final class StatusItemController: NSObject {
 
     private func showMenu(from button: NSStatusBarButton) {
         let menu = NSMenu()
+        menu.addItem(NSMenuItem(title: StatusItemMenuDefinition.statusCenterTitle, action: #selector(statusCenterPressed), keyEquivalent: ","))
+        menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: StatusItemMenuDefinition.refreshTitle, action: #selector(refreshPressed), keyEquivalent: "r"))
+        menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: StatusItemMenuDefinition.quitTitle, action: #selector(quitPressed), keyEquivalent: "q"))
         menu.items.forEach { $0.target = self }
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 2), in: button)
+    }
+
+    @objc private func statusCenterPressed() {
+        onOpenStatusCenter?()
     }
 
     @objc private func refreshPressed() {

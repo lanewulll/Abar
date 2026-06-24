@@ -14,7 +14,7 @@ public enum AbarHookEventNormalizer {
 
         let eventName = string(record["hook_event_name"] ?? record["eventType"] ?? record["event_type"])
         let eventType = normalizeEventType(eventName)
-        let payloadJSON = try sanitizedJSONString(from: object)
+        let payloadJSON = try minimalPayloadJSONString(from: record)
         return AbarStoredEvent(
             id: string(record["id"]) ?? UUID().uuidString,
             eventType: eventType,
@@ -67,34 +67,57 @@ public enum AbarHookEventNormalizer {
         return ISO8601DateFormatter().string(from: fallback)
     }
 
-    private static func sanitizedJSONString(from value: Any) throws -> String {
-        let sanitized = sanitize(value)
-        guard JSONSerialization.isValidJSONObject(sanitized) else {
+    static func minimalPayloadJSONString(from record: [String: Any]) throws -> String {
+        var minimal: [String: Any] = [:]
+        copyString(record, keys: ["hook_event_name", "eventType", "event_type"], to: "hook_event_name", in: &minimal)
+        copyString(record, keys: ["cwd", "projectPath", "project_path"], to: "cwd", in: &minimal)
+        copyString(record, keys: ["session_id", "sessionId"], to: "session_id", in: &minimal)
+        copyString(record, keys: ["turn_id", "turnId"], to: "turn_id", in: &minimal)
+        copyString(record, keys: ["tool_name", "toolName", "agent_type"], to: "tool_name", in: &minimal)
+        copyString(record, keys: ["status"], to: "status", in: &minimal)
+        if let prompt = string(record["prompt"]) {
+            minimal["prompt_preview"] = promptPreview(prompt)
+        } else if let preview = string(record["prompt_preview"]) {
+            minimal["prompt_preview"] = promptPreview(preview)
+        }
+        if let connection = record["abar_connection"] as? [String: Any],
+           let mode = string(connection["mode"]) {
+            var savedConnection: [String: Any] = ["mode": mode]
+            if mode == "api", let baseURL = string(connection["baseUrl"] ?? connection["baseURL"] ?? connection["base_url"]) {
+                savedConnection["baseUrl"] = baseURL
+            }
+            minimal["abar_connection"] = savedConnection
+        }
+
+        guard JSONSerialization.isValidJSONObject(minimal) else {
             throw AbarHookEventNormalizerError.invalidJSON
         }
-        let data = try JSONSerialization.data(withJSONObject: sanitized, options: [.sortedKeys])
+        let data = try JSONSerialization.data(withJSONObject: minimal, options: [.sortedKeys])
         return String(data: data, encoding: .utf8) ?? "{}"
     }
 
-    private static func sanitize(_ value: Any) -> Any {
-        if let dictionary = value as? [String: Any] {
-            var sanitized: [String: Any] = [:]
-            for (key, item) in dictionary {
-                sanitized[key] = isSensitiveKey(key) ? "[redacted]" : sanitize(item)
+    private static func copyString(
+        _ record: [String: Any],
+        keys: [String],
+        to destination: String,
+        in minimal: inout [String: Any]
+    ) {
+        for key in keys {
+            if let value = string(record[key]) {
+                minimal[destination] = value
+                return
             }
-            return sanitized
         }
-        if let array = value as? [Any] {
-            return array.map(sanitize)
-        }
-        return value
     }
 
-    private static func isSensitiveKey(_ key: String) -> Bool {
-        let lower = key.lowercased()
-        return ["authorization", "password", "secret", "token", "api_key", "apikey"].contains {
-            lower.contains($0)
+    private static func promptPreview(_ prompt: String) -> String {
+        let compact = prompt
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        guard compact.count > 15 else {
+            return compact
         }
+        return String(compact.prefix(15)) + "..."
     }
 
     private static func dictionary(_ value: Any?) -> [String: Any]? {
