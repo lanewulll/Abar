@@ -9,7 +9,8 @@
     "start:native": "native-overlay/scripts/start.sh",
     "build": "npm run build:native",
     "build:native": "cd native-overlay && swift build -c release && scripts/build-app.sh",
-    "test": "npm run test:native",
+    "test": "npm run test:hooks && npm run test:native",
+    "test:hooks": "node --test reporters/codex-hook-reporter/install.test.js",
     "test:native": "cd native-overlay && swift test",
     "package:mac": "npm run build:native"
   }

@@ -39,5 +39,6 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
+/usr/bin/xattr -cr "$APP_DIR" 2>/dev/null || true
 /usr/bin/codesign --force --deep --sign - "$APP_DIR" >&2
 echo "$APP_DIR"

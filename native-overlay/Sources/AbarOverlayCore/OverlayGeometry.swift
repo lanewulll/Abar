@@ -14,10 +14,8 @@ public struct OverlayScreenSnapshot: Equatable {
 
 public struct OverlayGeometry {
     public static let preferredWidth: CGFloat = 500
-    public static let preferredHeight: CGFloat = 228
+    public static let preferredHeight: CGFloat = 212
     public static let collapsedWidth: CGFloat = 180
-    public static let completionGlowWidth: CGFloat = 300
-    public static let completionGlowHeight: CGFloat = 78
     public static let horizontalMargin: CGFloat = 16
 
     public static func panelFrame(on screen: OverlayScreenSnapshot) -> CGRect {
@@ -51,14 +49,4 @@ public struct OverlayGeometry {
         )
     }
 
-    public static func completionGlowFrame(on screen: OverlayScreenSnapshot) -> CGRect {
-        let width = min(completionGlowWidth, max(80, screen.frame.width - (horizontalMargin * 2)))
-        let height = completionGlowHeight
-        return CGRect(
-            x: screen.frame.midX - width / 2,
-            y: screen.frame.maxY - height,
-            width: width,
-            height: height
-        )
-    }
 }

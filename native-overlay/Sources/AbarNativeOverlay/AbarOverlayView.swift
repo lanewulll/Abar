@@ -3,6 +3,11 @@ import SwiftUI
 
 struct AbarOverlayView: View {
     @ObservedObject var model: AbarOverlayModel
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var palette: AbarOverlayPalette {
+        AbarOverlayPalette(colorScheme: colorScheme)
+    }
 
     var body: some View {
         ZStack {
@@ -14,55 +19,41 @@ struct AbarOverlayView: View {
                     .transition(.opacity)
             }
         }
-        .animation(.easeOut(duration: 0.16), value: model.isExpanded)
+        .animation(.easeInOut(duration: AbarOverlayPresentationPolicy.contentAnimationDuration), value: model.isExpanded)
     }
 
     private var expandedContent: some View {
-        ZStack(alignment: .topTrailing) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Spacer()
-                }
-                .frame(height: 22)
-
-                HStack(spacing: 10) {
-                    MetricPill(title: "5h", value: percentText(model.snapshot.fiveHour.remainingPercent))
-                    MetricPill(title: "Weekly", value: percentText(model.snapshot.weekly.remainingPercent))
-                    MetricPill(title: "Skills", value: "\(model.snapshot.skillsCount)")
-                    MetricPill(title: "Events", value: "\(model.snapshot.eventsCount)")
-                }
-
-                TaskList(tasks: model.displayedTasks) { task in
-                    model.activate(task: task)
-                }
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .top, spacing: 8) {
+                QuotaZone(kind: .fiveHour, title: "5H", systemImage: "clock", summary: model.snapshot.fiveHour, alignment: .leading)
+                    .frame(width: 138, height: 66)
+                CodexSourceZone(summary: model.snapshot.codexConnection)
+                    .frame(maxWidth: .infinity, minHeight: 66, maxHeight: 66)
+                QuotaZone(kind: .weekly, title: "WEEKLY", systemImage: "calendar.badge.clock", summary: model.snapshot.weekly, alignment: .trailing)
+                    .frame(width: 138, height: 66)
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 10)
-            .padding(.bottom, 14)
+            .frame(height: 66)
 
-            HStack(spacing: 8) {
-                Button("Refresh") {
-                    model.refresh()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                Button("Quit") {
-                    NSApplication.shared.terminate(nil)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+            TaskList(tasks: model.displayedTasks, now: model.clockNow) { task in
+                model.activate(task: task)
             }
-            .padding(.top, 10)
-            .padding(.trailing, 18)
         }
+        .padding(.horizontal, 18)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
         .frame(width: OverlayGeometry.preferredWidth, height: OverlayGeometry.preferredHeight)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(.thinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(palette.panelScrim)
+                )
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(borderColor.opacity(0.86), lineWidth: 1.4)
+                .stroke(palette.panelBorder, lineWidth: 1.0)
         )
-        .shadow(color: borderColor.opacity(0.22), radius: 20, x: 0, y: 8)
-        .shadow(color: .black.opacity(0.16), radius: 28, x: 0, y: 14)
     }
 
     private var collapsedContent: some View {
@@ -71,51 +62,203 @@ struct AbarOverlayView: View {
             .frame(width: OverlayGeometry.collapsedWidth, height: 28)
     }
 
-    private var borderColor: Color {
-        switch model.displayedActivityState {
-        case .idle:
-            return Color(red: 0.59, green: 0.88, blue: 0.68)
-        case .working:
-            return Color(red: 0.96, green: 0.79, blue: 0.36)
-        }
-    }
+}
 
-    private func percentText(_ value: Int?) -> String {
-        value.map { "\($0)%" } ?? "n/a"
+private struct AbarOverlayPalette {
+    let panelScrim: Color
+    let panelBorder: Color
+    let primaryText: Color
+    let secondaryText: Color
+    let subduedText: Color
+    let accent: Color
+    let progressTrack: Color
+    let progressFill: Color
+    let runningRow: Color
+    let runningMarquee: Color
+    let runningMarqueeGlow: Color
+    let completedRow: Color
+    let jumpIcon: Color
+    let jumpHoverBackground: Color
+
+    init(colorScheme: ColorScheme) {
+        switch colorScheme {
+        case .dark:
+            panelScrim = Color(red: 0.05, green: 0.07, blue: 0.07).opacity(0.54)
+            panelBorder = Color.white.opacity(0.18)
+            primaryText = Color.white.opacity(0.96)
+            secondaryText = Color.white.opacity(0.82)
+            subduedText = Color.white.opacity(0.70)
+            accent = Color(red: 0.32, green: 0.72, blue: 1.00).opacity(0.96)
+            progressTrack = Color.white.opacity(0.18)
+            progressFill = Color(red: 0.18, green: 0.63, blue: 1.00).opacity(0.95)
+            runningRow = Color(red: 0.25, green: 0.73, blue: 0.40).opacity(0.48)
+            runningMarquee = Color(red: 0.62, green: 0.98, blue: 0.70).opacity(0.96)
+            runningMarqueeGlow = Color(red: 0.35, green: 0.95, blue: 0.48)
+            completedRow = Color.white.opacity(0.14)
+            jumpIcon = Color.white.opacity(0.88)
+            jumpHoverBackground = Color.white.opacity(0.18)
+        default:
+            panelScrim = Color.white.opacity(0.50)
+            panelBorder = Color.black.opacity(0.12)
+            primaryText = Color(red: 0.08, green: 0.10, blue: 0.12).opacity(0.95)
+            secondaryText = Color(red: 0.16, green: 0.20, blue: 0.25).opacity(0.84)
+            subduedText = Color(red: 0.25, green: 0.30, blue: 0.36).opacity(0.76)
+            accent = Color(red: 0.05, green: 0.43, blue: 0.92).opacity(0.92)
+            progressTrack = Color.black.opacity(0.13)
+            progressFill = Color(red: 0.04, green: 0.50, blue: 0.95).opacity(0.92)
+            runningRow = Color(red: 0.46, green: 0.84, blue: 0.55).opacity(0.52)
+            runningMarquee = Color(red: 0.05, green: 0.56, blue: 0.18).opacity(0.88)
+            runningMarqueeGlow = Color(red: 0.12, green: 0.72, blue: 0.28)
+            completedRow = Color(red: 0.10, green: 0.13, blue: 0.16).opacity(0.10)
+            jumpIcon = Color(red: 0.10, green: 0.13, blue: 0.16).opacity(0.80)
+            jumpHoverBackground = Color.black.opacity(0.08)
+        }
     }
 }
 
-private struct MetricPill: View {
+private struct QuotaZone: View {
+    let kind: AbarQuotaWindowKind
     let title: String
-    let value: String
+    let systemImage: String
+    let summary: QuotaWindowSummary
+    let alignment: HorizontalAlignment
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var palette: AbarOverlayPalette {
+        AbarOverlayPalette(colorScheme: colorScheme)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title.uppercased())
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.system(size: 15, weight: .semibold))
+        VStack(alignment: alignment, spacing: 3) {
+            titleRow
+
+            Text(valueText)
+                .font(.system(size: 25, weight: .bold))
                 .monospacedDigit()
+                .foregroundStyle(palette.primaryText)
+
+            ProgressBar(progress: progress)
+
+            if let resetText {
+                Text(resetText)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(palette.subduedText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color.white.opacity(0.36), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: frameAlignment)
+    }
+
+    @ViewBuilder
+    private var titleRow: some View {
+        HStack(spacing: 6) {
+            if alignment == .trailing {
+                Spacer(minLength: 0)
+            }
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(palette.accent)
+            Text(title)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(palette.subduedText)
+                .lineLimit(1)
+            if alignment == .leading {
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private var valueText: String {
+        summary.remainingPercent.map { "\($0)%" } ?? "n/a"
+    }
+
+    private var progress: Double? {
+        guard let remainingPercent = summary.remainingPercent else { return nil }
+        return min(max(Double(remainingPercent) / 100, 0), 1)
+    }
+
+    private var resetText: String? {
+        AbarQuotaResetLabel.text(for: kind, resetsAt: summary.resetsAt)
+    }
+
+    private var frameAlignment: Alignment {
+        alignment == .trailing ? .topTrailing : .topLeading
+    }
+}
+
+private struct ProgressBar: View {
+    let progress: Double?
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var palette: AbarOverlayPalette {
+        AbarOverlayPalette(colorScheme: colorScheme)
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(palette.progressTrack)
+                Capsule()
+                    .fill(progress == nil ? palette.progressFill.opacity(0.34) : palette.progressFill)
+                    .frame(width: proxy.size.width * CGFloat(progress ?? 0))
+            }
+        }
+        .frame(height: 4)
+    }
+}
+
+private struct CodexSourceZone: View {
+    let summary: AbarCodexConnectionSummary
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var palette: AbarOverlayPalette {
+        AbarOverlayPalette(colorScheme: colorScheme)
+    }
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Spacer(minLength: 16)
+            Text(label)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(palette.subduedText)
+                .lineLimit(1)
+            Text(summary.displayText)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(palette.primaryText)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .minimumScaleFactor(0.72)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .padding(.horizontal, 8)
+    }
+
+    private var label: String {
+        switch summary.mode {
+        case .account:
+            return "Codex account"
+        case .api:
+            return "Codex API"
+        case .unknown:
+            return "Codex source"
+        }
     }
 }
 
 private struct TaskList: View {
     let tasks: [AbarTaskSummary]
+    let now: Date
     let onJump: (AbarTaskSummary) -> Void
 
     var body: some View {
-        VStack(spacing: 6) {
-            if tasks.isEmpty {
-                EmptyTaskRow()
-            } else {
-                ForEach(tasks.prefix(4)) { task in
-                    TaskRow(task: task, onJump: onJump)
+        VStack(spacing: 5) {
+            ForEach(AbarTaskListSlots.make(tasks: tasks)) { slot in
+                if let task = slot.task {
+                    TaskRow(task: task, now: now, onJump: onJump)
+                } else {
+                    EmptyTaskSlot()
                 }
             }
         }
@@ -123,42 +266,46 @@ private struct TaskList: View {
     }
 }
 
-private struct EmptyTaskRow: View {
+private struct EmptyTaskSlot: View {
     var body: some View {
-        HStack {
-            Text("Idle")
-                .font(.system(size: 13, weight: .semibold))
-            Spacer()
-            Text("No active task")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 28)
-        .background(Color.white.opacity(0.24), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        Color.clear
+            .frame(height: 27)
     }
 }
 
 private struct TaskRow: View {
     let task: AbarTaskSummary
+    let now: Date
     let onJump: (AbarTaskSummary) -> Void
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var palette: AbarOverlayPalette {
+        AbarOverlayPalette(colorScheme: colorScheme)
+    }
 
     var body: some View {
         HStack(spacing: 8) {
+            TaskAvatar(projectName: task.projectName, state: task.state)
             Text(task.projectName)
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(1)
-                .frame(width: 116, alignment: .leading)
+                .foregroundStyle(palette.primaryText)
+                .frame(width: 126, alignment: .leading)
             Text(task.promptPreview)
                 .font(.system(size: 13, weight: .medium))
                 .lineLimit(1)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(palette.secondaryText)
             Spacer(minLength: 8)
             trailingControl
         }
-        .padding(.horizontal, 12)
-        .frame(height: 28)
+        .padding(.horizontal, 6)
+        .frame(height: 27)
         .background(rowBackground, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay {
+            if task.state == .running {
+                RunningTaskMarqueeBorder(cornerRadius: 9)
+            }
+        }
     }
 
     @ViewBuilder
@@ -168,42 +315,150 @@ private struct TaskRow: View {
             Text(elapsedText)
                 .font(.system(size: 12, weight: .semibold))
                 .monospacedDigit()
-                .foregroundStyle(.secondary)
+                .foregroundStyle(palette.secondaryText)
         case .completed:
-            Button {
+            TaskJumpButton {
                 onJump(task)
-            } label: {
-                Image(systemName: "arrow.up.forward.square")
-                    .font(.system(size: 14, weight: .semibold))
-                    .frame(width: 44, height: 28)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .controlSize(.small)
-            .accessibilityLabel("Open task")
         }
     }
 
     private var rowBackground: Color {
         switch task.state {
         case .running:
-            return Color(red: 1.00, green: 0.92, blue: 0.65).opacity(0.32)
+            return palette.runningRow
         case .completed:
-            return Color(red: 0.67, green: 0.92, blue: 0.73).opacity(0.34)
+            return palette.completedRow
         }
     }
 
     private var elapsedText: String {
-        let seconds = max(0, task.durationSeconds)
-        let hours = seconds / 3600
-        let minutes = (seconds % 3600) / 60
-        let remainingSeconds = seconds % 60
-        if hours > 0 {
-            return "\(hours)h \(minutes)m"
+        AbarTaskElapsedText.text(for: task, now: now)
+    }
+}
+
+private struct RunningTaskMarqueeBorder: View {
+    let cornerRadius: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var palette: AbarOverlayPalette {
+        AbarOverlayPalette(colorScheme: colorScheme)
+    }
+
+    var body: some View {
+        if reduceMotion {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .stroke(palette.runningMarquee, lineWidth: 1.4)
+                .allowsHitTesting(false)
+        } else {
+            TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+                animatedBorder(at: context.date)
+            }
+            .allowsHitTesting(false)
         }
-        if minutes > 0 {
-            return "\(minutes)m \(remainingSeconds)s"
+    }
+
+    private func animatedBorder(at date: Date) -> some View {
+        let period = 1.4
+        let elapsed = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period)
+        let progress = elapsed / period
+        let pulse = progress < 0.5 ? progress * 2 : (1 - progress) * 2
+        let dashPhase = CGFloat(progress * -32)
+
+        return ZStack {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .stroke(palette.runningMarqueeGlow.opacity(0.16 + pulse * 0.18), lineWidth: 3.0)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .stroke(
+                    palette.runningMarquee,
+                    style: StrokeStyle(
+                        lineWidth: 1.45,
+                        lineCap: .round,
+                        lineJoin: .round,
+                        dash: [13, 8],
+                        dashPhase: dashPhase
+                    )
+                )
         }
-        return "\(remainingSeconds)s"
+    }
+}
+
+private struct TaskAvatar: View {
+    let projectName: String
+    let state: AbarTaskState
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Text(AbarTaskAvatarInitial.initial(for: projectName))
+            .font(.system(size: 13, weight: .black))
+            .foregroundStyle(foregroundColor)
+            .frame(width: 24, height: 24)
+            .background(backgroundColor, in: Circle())
+    }
+
+    private var backgroundColor: Color {
+        switch state {
+        case .running:
+            return Color(red: 0.62, green: 0.90, blue: 0.66)
+        case .completed:
+            switch colorScheme {
+            case .dark:
+                return Color.white.opacity(0.26)
+            default:
+                return Color(red: 0.72, green: 0.76, blue: 0.78).opacity(0.90)
+            }
+        }
+    }
+
+    private var foregroundColor: Color {
+        switch state {
+        case .running:
+            return Color(red: 0.04, green: 0.34, blue: 0.12)
+        case .completed:
+            switch colorScheme {
+            case .dark:
+                return Color.white.opacity(0.82)
+            default:
+                return Color(red: 0.22, green: 0.25, blue: 0.28)
+            }
+        }
+    }
+}
+
+private struct TaskJumpButton: View {
+    let action: () -> Void
+    @State private var isHovered = false
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var palette: AbarOverlayPalette {
+        AbarOverlayPalette(colorScheme: colorScheme)
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "arrow.up.forward")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(palette.jumpIcon.opacity(isHovered ? 1.0 : 0.82))
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(TaskJumpButtonStyle(isHovered: isHovered, hoverBackground: palette.jumpHoverBackground))
+        .onHover { isHovered = $0 }
+        .accessibilityLabel("Open Codex task")
+    }
+}
+
+private struct TaskJumpButtonStyle: ButtonStyle {
+    let isHovered: Bool
+    let hoverBackground: Color
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(isHovered ? hoverBackground : Color.clear)
+            )
+            .opacity(configuration.isPressed ? 0.68 : 1)
     }
 }

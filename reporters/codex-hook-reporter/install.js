@@ -10,12 +10,7 @@ const command = `ABAR_SERVER_PORT=${port} node '${reporterPath.replace(/'/g, "'\
 
 const hook = {
   hooks: {
-    SessionStart: [{ matcher: 'startup|resume|clear|compact', hooks: [{ type: 'command', command, timeout: 2 }] }],
-    PreToolUse: [{ matcher: '*', hooks: [{ type: 'command', command, timeout: 2 }] }],
-    PostToolUse: [{ matcher: '*', hooks: [{ type: 'command', command, timeout: 2 }] }],
     UserPromptSubmit: [{ hooks: [{ type: 'command', command, timeout: 2 }] }],
-    SubagentStart: [{ matcher: '*', hooks: [{ type: 'command', command, timeout: 2 }] }],
-    SubagentStop: [{ matcher: '*', hooks: [{ type: 'command', command, timeout: 2 }] }],
     Stop: [{ hooks: [{ type: 'command', command, timeout: 2 }] }]
   }
 };

@@ -8,14 +8,19 @@ public enum AbarDatabaseReaderError: Error, Equatable {
 }
 
 public final class AbarDatabaseReader {
-    private static let completedTaskRetention: TimeInterval = 180
     private static let runningTaskInactivityRetention: TimeInterval = 900
 
     private let databasePath: String
+    private let codexHome: String
     private let now: () -> Date
 
-    public init(databasePath: String, now: @escaping () -> Date = Date.init) {
+    public init(
+        databasePath: String,
+        codexHome: String = (NSHomeDirectory() as NSString).appendingPathComponent(".codex"),
+        now: @escaping () -> Date = Date.init
+    ) {
         self.databasePath = databasePath
+        self.codexHome = codexHome
         self.now = now
     }
 
@@ -31,8 +36,12 @@ public final class AbarDatabaseReader {
         sqlite3_busy_timeout(db, 2_000)
 
         let quota = try latestQuota(db: db)
-        let events = try recentEvents(db: db, limit: 6)
-        let tasks = try taskSummaries(db: db, limit: 100)
+        let events = try recentEvents(db: db, limit: 20)
+        let tasks = try taskSummaries(db: db, limit: 1_000)
+        let codexConnection = AbarCodexConnectionResolver.resolve(
+            eventPayloads: events.compactMap(\.payloadJSON),
+            codexHome: codexHome
+        )
         return AbarSnapshot(
             fiveHour: quota.fiveHour,
             weekly: quota.weekly,
@@ -40,6 +49,7 @@ public final class AbarDatabaseReader {
             eventsCount: try count(db: db, table: "events"),
             recentEvents: events,
             tasks: tasks,
+            codexConnection: codexConnection,
             projectPath: try configValue(db: db, key: "project_path"),
             loadedAt: now()
         )
@@ -109,7 +119,7 @@ public final class AbarDatabaseReader {
     private func recentEvents(db: OpaquePointer, limit: Int) throws -> [AbarEventSummary] {
         var statement: OpaquePointer?
         let sql = """
-            SELECT id, event_type, tool_name, status, created_at
+            SELECT id, event_type, tool_name, status, payload_json, created_at
             FROM events
             ORDER BY created_at DESC
             LIMIT ?
@@ -130,7 +140,8 @@ public final class AbarDatabaseReader {
                     eventType: columnText(statement, 1) ?? "Unknown",
                     toolName: columnText(statement, 2),
                     status: columnText(statement, 3) ?? "unknown",
-                    createdAt: columnText(statement, 4).flatMap(Self.parseISODate)
+                    payloadJSON: columnText(statement, 4),
+                    createdAt: columnText(statement, 5).flatMap(Self.parseISODate)
                 )
             )
             stepStatus = sqlite3_step(statement)
@@ -158,6 +169,7 @@ public final class AbarDatabaseReader {
             let turnId = payloadString(payload, "turn_id") ?? row.id
             let projectPath = payloadString(payload, "cwd") ?? row.projectPath
             let prompt = payloadString(payload, "prompt") ?? "Codex task"
+            guard !Self.isInternalTaskPrompt(prompt) else { return nil }
             return TaskPrompt(
                 id: "\(sessionId):\(turnId)",
                 sessionId: sessionId,
@@ -176,35 +188,48 @@ public final class AbarDatabaseReader {
             guard let sessionId, let turnId else { return nil }
             return TaskStop(
                 id: "\(sessionId):\(turnId)",
+                sessionId: sessionId,
                 completedAt: row.createdAt
             )
         }
         let stopByTaskID = Dictionary(stops.map { ($0.id, $0.completedAt) }, uniquingKeysWith: max)
-        let promptsByProject = Dictionary(grouping: prompts) { prompt in
-            prompt.projectPath ?? prompt.projectName
+        let newestPromptBySession = Dictionary(
+            prompts.map { ($0.sessionId, $0) },
+            uniquingKeysWith: { lhs, rhs in lhs.startedAt >= rhs.startedAt ? lhs : rhs }
+        )
+        let latestPromptAtByProject = prompts.reduce(into: [String: Date]()) { result, prompt in
+            guard let projectPath = prompt.projectPath else { return }
+            result[projectPath] = max(result[projectPath] ?? prompt.startedAt, prompt.startedAt)
         }
         let currentDate = now()
+        let calendar = Calendar.current
 
         var tasks: [AbarTaskSummary] = []
         for prompt in prompts {
             let completedAt = stopByTaskID[prompt.id]
+                ?? fallbackStopCompletedAt(for: prompt, prompts: prompts, stops: stops)
             if let completedAt {
-                guard currentDate.timeIntervalSince(completedAt) <= Self.completedTaskRetention else {
+                guard calendar.isDate(completedAt, inSameDayAs: currentDate) else {
                     continue
                 }
-                let newerPromptExists = promptsByProject[prompt.projectPath ?? prompt.projectName]?.contains {
-                    $0.startedAt > completedAt
-                } ?? false
-                if newerPromptExists {
+            } else {
+                guard calendar.isDate(prompt.startedAt, inSameDayAs: currentDate),
+                      newestPromptBySession[prompt.sessionId]?.id == prompt.id
+                else {
                     continue
                 }
             }
             let lastActivityAt = completedAt ?? activityByTaskID[prompt.id] ?? prompt.startedAt
+            let durationSeconds = max(0, Int(lastActivityAt.timeIntervalSince(prompt.startedAt)))
             if completedAt == nil,
-               currentDate.timeIntervalSince(lastActivityAt) > Self.runningTaskInactivityRetention {
+               isStaleUnclosedPrompt(
+                   prompt,
+                   lastActivityAt: lastActivityAt,
+                   latestPromptAtByProject: latestPromptAtByProject,
+                   now: currentDate
+               ) {
                 continue
             }
-            let durationSeconds = max(0, Int(lastActivityAt.timeIntervalSince(prompt.startedAt)))
 
             tasks.append(
                 AbarTaskSummary(
@@ -223,13 +248,58 @@ public final class AbarDatabaseReader {
             )
         }
 
-        return tasks.sorted { lhs, rhs in
+        let sortedTasks = tasks.sorted { lhs, rhs in
             if lhs.state != rhs.state {
                 return lhs.state == .running
             }
-            let lhsDate = lhs.completedAt ?? lhs.startedAt
-            let rhsDate = rhs.completedAt ?? rhs.startedAt
+            let lhsDate = sortDate(for: lhs)
+            let rhsDate = sortDate(for: rhs)
             return lhsDate > rhsDate
+        }
+        return Array(sortedTasks.prefix(AbarTaskListSlots.visibleSlotCount))
+    }
+
+    private func isStaleUnclosedPrompt(
+        _ prompt: TaskPrompt,
+        lastActivityAt: Date,
+        latestPromptAtByProject: [String: Date],
+        now: Date
+    ) -> Bool {
+        guard let projectPath = prompt.projectPath,
+              let latestProjectPromptAt = latestPromptAtByProject[projectPath],
+              latestProjectPromptAt > prompt.startedAt
+        else {
+            return false
+        }
+        return now.timeIntervalSince(lastActivityAt) > Self.runningTaskInactivityRetention
+    }
+
+    private func fallbackStopCompletedAt(
+        for prompt: TaskPrompt,
+        prompts: [TaskPrompt],
+        stops: [TaskStop]
+    ) -> Date? {
+        let nextPromptAt = prompts
+            .filter { $0.sessionId == prompt.sessionId && $0.startedAt > prompt.startedAt }
+            .map(\.startedAt)
+            .min()
+
+        return stops
+            .filter { stop in
+                stop.sessionId == prompt.sessionId
+                    && stop.completedAt >= prompt.startedAt
+                    && nextPromptAt.map { stop.completedAt < $0 } ?? true
+            }
+            .map(\.completedAt)
+            .max()
+    }
+
+    private func sortDate(for task: AbarTaskSummary) -> Date {
+        switch task.state {
+        case .running:
+            return task.lastActivityAt
+        case .completed:
+            return task.completedAt ?? task.lastActivityAt
         }
     }
 
@@ -360,11 +430,63 @@ public final class AbarDatabaseReader {
     }
 
     private static func promptPreview(_ prompt: String) -> String {
-        let compact = prompt.filter { !$0.isWhitespace && !$0.isNewline }
-        guard compact.count > 5 else {
+        let compact = displayPromptText(from: prompt).filter { !$0.isWhitespace && !$0.isNewline }
+        guard compact.count > 15 else {
             return compact.isEmpty ? "Codex" : String(compact)
         }
-        return String(compact.prefix(5)) + "..."
+        return String(compact.prefix(15)) + "..."
+    }
+
+    private static func displayPromptText(from prompt: String) -> String {
+        let marker = "## My request for Codex:"
+        let displayPrompt: String
+        if let range = prompt.range(of: marker) {
+            displayPrompt = String(prompt[range.upperBound...])
+        } else {
+            displayPrompt = prompt
+        }
+        return planPromptTitle(from: displayPrompt) ?? displayPrompt
+    }
+
+    private static func planPromptTitle(from prompt: String) -> String? {
+        let marker = "PLEASE IMPLEMENT THIS PLAN:"
+        let normalized = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalized.hasPrefix(marker) else {
+            return nil
+        }
+
+        let planBody = normalized.dropFirst(marker.count)
+        for line in planBody.split(whereSeparator: \.isNewline) {
+            let heading = line.trimmingCharacters(in: .whitespaces)
+            guard heading.hasPrefix("#"), !heading.hasPrefix("##") else {
+                continue
+            }
+            let title = heading.dropFirst()
+            guard title.first?.isWhitespace == true else {
+                continue
+            }
+            let trimmedTitle = title.trimmingCharacters(in: .whitespaces)
+            if !trimmedTitle.isEmpty {
+                return trimmedTitle
+            }
+        }
+        return "执行计划模式计划"
+    }
+
+    private static func isInternalTaskPrompt(_ prompt: String) -> Bool {
+        let normalized = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        return isInternalSuggestionPrompt(normalized) || isAmbientSafetyPrompt(normalized)
+    }
+
+    private static func isInternalSuggestionPrompt(_ normalized: String) -> Bool {
+        return normalized.hasPrefix("# Overview")
+            && normalized.contains("Generate 0 to 3 hyperpersonalized suggestions")
+            && normalized.contains("what this user can do with Codex")
+    }
+
+    private static func isAmbientSafetyPrompt(_ normalized: String) -> Bool {
+        normalized.hasPrefix("You are an expert at upholding safety and compliance standards for Codex ambient suggestions")
+            && normalized.contains("ambient suggestion candidates")
     }
 
     private static func parseISODate(_ value: String) -> Date? {
@@ -406,6 +528,7 @@ private struct TaskPrompt {
 
 private struct TaskStop {
     var id: String
+    var sessionId: String
     var completedAt: Date
 }
 

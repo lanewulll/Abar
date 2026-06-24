@@ -3,39 +3,38 @@ import AppKit
 
 @MainActor
 final class TaskNavigator {
-    private let workspace: NSWorkspace
+    private let openDeepLink: (URL) -> Bool
+    private let activateBundle: (String) -> Bool
 
     init(workspace: NSWorkspace = .shared) {
-        self.workspace = workspace
+        openDeepLink = { url in
+            workspace.open(url)
+        }
+        activateBundle = { bundleIdentifier in
+            Self.activate(bundleIdentifier: bundleIdentifier, workspace: workspace)
+        }
+    }
+
+    init(
+        openDeepLink: @escaping (URL) -> Bool,
+        activateBundle: @escaping (String) -> Bool
+    ) {
+        self.openDeepLink = openDeepLink
+        self.activateBundle = activateBundle
     }
 
     func activate(task: AbarTaskSummary) {
-        for bundleIdentifier in preferredBundleIdentifiers(for: task) {
-            if activate(bundleIdentifier: bundleIdentifier) {
-                return
-            }
+        let plan = CodexTaskNavigationPlan.make(for: task)
+        if let deepLinkURL = plan.deepLinkURL,
+           openDeepLink(deepLinkURL) {
+            _ = activateBundle(plan.fallbackBundleIdentifier)
+            return
         }
-    }
-
-    private func preferredBundleIdentifiers(for task: AbarTaskSummary) -> [String] {
-        if task.id.hasPrefix("chat-conversation:") || task.projectName == "ChatGPT" {
-            return ["com.openai.chat", "com.openai.codex"]
-        }
-
-        if let frontmost = workspace.frontmostApplication?.bundleIdentifier,
-           ["com.openai.chat", "com.openai.codex"].contains(frontmost) {
-            return [frontmost] + ["com.openai.chat", "com.openai.codex"].filter { $0 != frontmost }
-        }
-
-        if !NSRunningApplication.runningApplications(withBundleIdentifier: "com.openai.chat").isEmpty {
-            return ["com.openai.chat", "com.openai.codex"]
-        }
-
-        return ["com.openai.codex", "com.openai.chat"]
+        _ = activateBundle(plan.fallbackBundleIdentifier)
     }
 
     @discardableResult
-    private func activate(bundleIdentifier: String) -> Bool {
+    private static func activate(bundleIdentifier: String, workspace: NSWorkspace) -> Bool {
         if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).first {
             app.unhide()
             let activated = app.activate(options: [.activateAllWindows])
@@ -56,7 +55,7 @@ final class TaskNavigator {
     }
 
     @discardableResult
-    private func activateWithAppleScript(bundleIdentifier: String) -> Bool {
+    private static func activateWithAppleScript(bundleIdentifier: String) -> Bool {
         let activateSource = """
         tell application id "\(bundleIdentifier)" to activate
         """

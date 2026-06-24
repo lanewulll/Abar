@@ -21,10 +21,10 @@ final class AbarMaintenanceService {
     func start() {
         refreshQuota()
         rescanSkills()
-        quotaTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+        quotaTimer = Timer.scheduledTimer(withTimeInterval: AbarSamplingPolicy.quotaRefreshInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refreshQuota() }
         }
-        skillsTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+        skillsTimer = Timer.scheduledTimer(withTimeInterval: AbarSamplingPolicy.skillScanInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.rescanSkills() }
         }
     }

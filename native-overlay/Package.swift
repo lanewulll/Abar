@@ -25,6 +25,10 @@ let package = Package(
         .testTarget(
             name: "AbarOverlayCoreTests",
             dependencies: ["AbarOverlayCore"]
+        ),
+        .testTarget(
+            name: "AbarNativeOverlayTests",
+            dependencies: ["AbarNativeOverlay", "AbarOverlayCore"]
         )
     ]
 )
