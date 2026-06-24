@@ -1,0 +1,59 @@
+name: Bug 报告
+description: 报告可以稳定复现的问题
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: 请先确认你正在使用最新的 main 分支，并移除所有令牌和个人数据。
+  - type: input
+    id: macos
+    attributes:
+      label: macOS 版本
+      placeholder: 例如 14.6
+    validations:
+      required: true
+  - type: input
+    id: hardware
+    attributes:
+      label: Mac 型号
+      placeholder: 例如 MacBook Pro M2
+    validations:
+      required: true
+  - type: input
+    id: revision
+    attributes:
+      label: Abar 版本或 commit
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 启动……
+        2. 在 Codex 中……
+        3. 观察到……
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期行为
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为与日志
+      description: 请删除令牌、Cookie、邮箱和私人路径。
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: 隐私确认
+      options:
+        - label: 我确认内容中不包含访问令牌、Cookie 或完整 auth.json。
+          required: true

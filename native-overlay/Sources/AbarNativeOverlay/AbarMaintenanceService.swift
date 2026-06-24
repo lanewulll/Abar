@@ -4,7 +4,7 @@ import Foundation
 @MainActor
 final class AbarMaintenanceService {
     private let store: AbarEventStore
-    private let projectPath: String
+    private let fallbackProjectPath: String
     private let onChanged: @MainActor () -> Void
     private let queue = DispatchQueue(label: "dev.abar.native-overlay.maintenance")
     private var quotaTimer: Timer?
@@ -12,9 +12,9 @@ final class AbarMaintenanceService {
     private var quotaRefreshInFlight = false
     private var skillsRefreshInFlight = false
 
-    init(store: AbarEventStore, projectPath: String, onChanged: @escaping @MainActor () -> Void) {
+    init(store: AbarEventStore, fallbackProjectPath: String, onChanged: @escaping @MainActor () -> Void) {
         self.store = store
-        self.projectPath = projectPath
+        self.fallbackProjectPath = fallbackProjectPath
         self.onChanged = onChanged
     }
 
@@ -56,6 +56,7 @@ final class AbarMaintenanceService {
     func rescanSkills() {
         guard !skillsRefreshInFlight else { return }
         skillsRefreshInFlight = true
+        let projectPath = currentProjectPath()
         queue.async { [store, projectPath] in
             let result = AbarSkillScanner.scan(projectPath: projectPath)
             do {
@@ -71,5 +72,9 @@ final class AbarMaintenanceService {
                 self?.onChanged()
             }
         }
+    }
+
+    func currentProjectPath() -> String {
+        (try? store.configValue(key: "project_path")) ?? fallbackProjectPath
     }
 }

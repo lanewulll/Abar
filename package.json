@@ -3,14 +3,37 @@
   "version": "0.1.0",
   "description": "Codex-only native macOS overlay monitor for quota, skills, and local activity.",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lanewulll/Abar.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lanewulll/Abar/issues"
+  },
+  "homepage": "https://github.com/lanewulll/Abar#readme",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "npm run start:native",
     "start:native": "native-overlay/scripts/start.sh",
+    "check": "scripts/check-env.sh",
+    "doctor": "scripts/doctor.sh",
+    "setup": "scripts/setup.sh",
     "build": "npm run build:native",
     "build:native": "cd native-overlay && swift build -c release && scripts/build-app.sh",
+    "install:app": "scripts/install-app.sh",
+    "uninstall:app": "scripts/uninstall-app.sh",
     "test": "npm run test:hooks && npm run test:native",
-    "test:hooks": "node --test reporters/codex-hook-reporter/install.test.js",
+    "test:hooks": "node --test reporters/codex-hook-reporter/*.test.js",
     "test:native": "cd native-overlay && swift test",
     "package:mac": "npm run build:native"
   }

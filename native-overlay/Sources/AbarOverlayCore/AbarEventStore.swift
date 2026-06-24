@@ -144,6 +144,11 @@ public final class AbarEventStore: @unchecked Sendable {
             guard sqlite3_step(statement) == SQLITE_DONE else {
                 throw AbarEventStoreError.stepFailed(String(cString: sqlite3_errmsg(db)))
             }
+            if let projectPath = event.projectPath?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !projectPath.isEmpty {
+                try setConfig(db, key: "project_path", value: projectPath)
+            }
         }
     }
 
